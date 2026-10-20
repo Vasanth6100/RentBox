@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RentBox | Rent More. Spend Less. Mumbai Peer-to-Peer Rental Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f6faf7;
+      --surface: #ffffff;
+      --surface-border: #e2ede6;
+      --primary: #005c42;
+      --primary-hover: #004733;
+      --accent: #10b981;
+      --accent-light: #e8f5ee;
+      --text: #14241e;
+      --text-muted: #577366;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Navbar */
+    nav {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 16px 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      background: var(--primary);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      box-shadow: 0 4px 12px rgba(0, 92, 66, 0.25);
+    }
+
+    .brand-text h1 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+
+    .brand-text p {
+      font-size: 10.5px;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--surface-border);
+    }
+
+    .btn-outline:hover {
+      background: var(--accent-light);
+    }
+
+    .btn-admin {
+      background: #14241e;
+      color: #34d399;
+      border: 1px solid #1f3b30;
+    }
+
+    .btn-admin:hover {
+      background: #1c332a;
+    }
+
+    /* Hero */
+    .hero {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 48px 24px 24px;
+      text-align: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent-light);
+      color: var(--primary);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 800;
+      margin-bottom: 18px;
+      border: 1px solid #cce5d7;
+    }
+
+    .hero h2 {
+      font-size: 44px;
+      font-weight: 900;
+      letter-spacing: -1.2px;
+      line-height: 1.15;
+      color: #0c1c16;
+      max-width: 800px;
+      margin: 0 auto 16px;
+    }
+
+    .hero p {
+      font-size: 17px;
+      color: var(--text-muted);
+      max-width: 620px;
+      margin: 0 auto 28px;
+      line-height: 1.5;
+    }
+
+    /* Search Bar */
+    .search-box {
+      max-width: 760px;
+      margin: 0 auto 40px;
+      background: white;
+      border-radius: 36px;
+      padding: 8px 12px 8px 24px;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 10px 30px rgba(0, 92, 66, 0.08);
+      border: 1px solid var(--surface-border);
+    }
+
+    .search-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 15px;
+      color: var(--text);
+    }
+
+    /* Filter Chips */
+    .categories {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 36px;
+    }
+
+    .cat-chip {
+      background: white;
+      border: 1px solid var(--surface-border);
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .cat-chip.active, .cat-chip:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    /* Grid */
+    .grid-container {
+      max-width: 1280px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+      flex: 1;
+    }
+
+    .items-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 24px;
+    }
+
+    .item-card {
+      background: white;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid var(--surface-border);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.03);
+      transition: all 0.25s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .item-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 28px rgba(0, 92, 66, 0.1);
+      border-color: #bad3c5;
+    }
+
+    .item-thumbnail {
+      position: relative;
+      height: 200px;
+      overflow: hidden;
+      background: #e9f0ec;
+    }
+
+    .item-thumbnail img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.3s ease;
+    }
+
+    .item-card:hover .item-thumbnail img {
+      transform: scale(1.05);
+    }
+
+    .badge-category {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(0, 92, 66, 0.9);
+      color: white;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 12px;
+      backdrop-filter: blur(4px);
+    }
+
+    .badge-instant {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: white;
+      color: #005c42;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+
+    .item-body {
+      padding: 18px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .item-title {
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.3;
+      margin-bottom: 6px;
+      color: #10241c;
+    }
+
+    .item-location {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .item-owner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #3b5448;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #edf4ef;
+    }
+
+    .owner-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .item-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .item-price {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .price-val {
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--primary);
+    }
+
+    .deposit-val {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-box {
+      background: white;
+      max-width: 500px;
+      width: 100%;
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Footer */
+    footer {
+      background: white;
+      border-top: 1px solid var(--surface-border);
+      padding: 28px 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13.5px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <nav>
+    <a href="/" class="brand">
+      <div class="brand-logo">📦</div>
+      <div class="brand-text">
+        <h1>RentBox</h1>
+        <p>RENT MORE. SPEND LESS.</p>
+      </div>
+    </a>
+
+    <div class="nav-actions">
+      <a href="/admin" class="btn btn-admin">⚙️ Official Admin Portal</a>
+      <a href="/app/#/" class="btn btn-primary">📱 Open Flutter Web App</a>
+    </div>
+  </nav>
+
+  <!-- Hero Banner -->
+  <section class="hero">
+    <div class="hero-badge">⚡ Verified Peer-to-Peer Rental Network • Mumbai</div>
+    <h2>Rent High-End Cameras, Gaming, Drones & Tools from Trusted Neighbors</h2>
+    <p>Zero high deposits on neighborhood verified gear. Comprehensive escrow protection with instant QR pickup.</p>
+
+    <!-- Search -->
+    <div class="search-box">
+      <input type="text" id="search-input" class="search-input" placeholder="Search Sony cameras, PS5, camping gear, drill sets..." oninput="handleSearch()">
+      <button class="btn btn-primary" onclick="handleSearch()">Search</button>
+    </div>
+
+    <!-- Category Chips -->
+    <div class="categories">
+      <button class="cat-chip active" onclick="filterCategory('All')">⚡ All Items</button>
+      <button class="cat-chip" onclick="filterCategory('Electronics')">📸 Cameras & Audio</button>
+      <button class="cat-chip" onclick="filterCategory('Gaming')">🎮 PlayStation & Consoles</button>
+      <button class="cat-chip" onclick="filterCategory('Drones')">🚁 4K Drones</button>
+      <button class="cat-chip" onclick="filterCategory('Camping')">⛺ Camping & Trekking</button>
+      <button class="cat-chip" onclick="filterCategory('Tools')">🛠️ Power Tools</button>
+    </div>
+  </section>
+
+  <!-- Listings Grid -->
+  <main class="grid-container">
+    <div class="items-grid" id="items-grid">
+      <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
+        Loading active verified items from SQLite database...
+      </div>
+    </div>
+  </main>
+
+  <!-- Rent Modal Simulator -->
+  <div class="modal" id="rent-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="modal-title" style="font-size: 18px; font-weight: 800;">Rent Item</h3>
+        <button onclick="closeModal()" style="border: none; background: none; font-size: 20px; cursor: pointer;">✕</button>
+      </div>
+      <div id="modal-content">
+        <!-- populated dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div>© 2026 RentBox India Private Limited • Safe Neighborhood Rentals</div>
+    <div style="display: flex; gap: 20px;">
+      <a href="/admin" style="color: var(--primary); text-decoration: none; font-weight: 700;">Admin Console</a>
+      <a href="/api/health" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 700;">API Health</a>
+      <a href="/app/#/admin" style="color: var(--primary); text-decoration: none; font-weight: 700;">Flutter Admin Deep Link</a>
+    </div>
+  </footer>
+
+  <script>
+    let allListings = [];
+    let currentCategory = 'All';
+
+    async function loadListings() {
+      try {
+        const res = await fetch('/api/listings?status=active');
+        allListings = await res.json();
+        renderGrid();
+      } catch (e) {
+        console.error('Failed to load listings:', e);
+      }
+    }
+
+    function renderGrid() {
+      const q = document.getElementById('search-input').value.toLowerCase().trim();
+      const grid = document.getElementById('items-grid');
+
+      let filtered = allListings;
+      if (currentCategory !== 'All') {
+        filtered = filtered.filter(item => item.category.toLowerCase().includes(currentCategory.toLowerCase()));
+      }
+      if (q) {
+        filtered = filtered.filter(item =>
+          item.title.toLowerCase().includes(q) ||
+          item.description.toLowerCase().includes(q) ||
+          item.location.toLowerCase().includes(q)
+        );
+      }
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; color: var(--text-muted);">
+            <h3>No items matched your query</h3>
+            <p style="margin-top: 8px;">Try searching for "Sony", "Drone", or "Camping".</p>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(item => `
+        <div class="item-card">
+          <div class="item-thumbnail">
+            <img src="${(item.imageUrls && item.imageUrls[0]) || 'https://via.placeholder.com/400x300'}" alt="${item.title}" />
+            <span class="badge-category">${item.category}</span>
+            <span class="badge-instant">⚡ Instant Book</span>
+          </div>
+          <div class="item-body">
+            <div>
+              <div class="item-title">${item.title}</div>
+              <div class="item-location">📍 ${item.location}</div>
+            </div>
+            <div>
+              <div class="item-owner">
+                <img src="${item.ownerAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" class="owner-avatar" />
+                <span>Hosted by <strong>${item.ownerName}</strong> ★ ${item.ownerRating || 4.9}</span>
+              </div>
+              <div class="item-footer">
+                <div class="item-price">
+                  <span class="price-val">₹${item.pricePerDay}<span style="font-size: 13px; font-weight: 600; color: var(--text-muted);">/day</span></span>
+                  <span class="deposit-val">Security Deposit: ₹${item.securityDeposit}</span>
+                </div>
+                <button class="btn btn-primary" onclick="openRentModal('${item.id}')">Rent Now</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function filterCategory(cat) {
+      currentCategory = cat;
+      document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+      event.target.classList.add('active');
+      renderGrid();
+    }
+
+    function handleSearch() {
+      renderGrid();
+    }
+
+    function openRentModal(id) {
+      const item = allListings.find(l => l.id === id);
+      if (!item) return;
+
+      const modal = document.getElementById('rent-modal');
+      const title = document.getElementById('modal-title');
+      const content = document.getElementById('modal-content');
+
+      title.innerText = `Book ${item.title}`;
+      content.innerHTML = `
+        <div style="display: flex; gap: 14px; align-items: center; margin-bottom: 14px;">
+          <img src="${item.imageUrls[0]}" style="width: 70px; height: 70px; border-radius: 12px; object-fit: cover;" />
+          <div>
+            <strong>${item.title}</strong>
+            <div style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">Daily Rate: ₹${item.pricePerDay} | Deposit: ₹${item.securityDeposit}</div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+          <label style="font-size: 13px; font-weight: 700;">Rental Duration (Days):</label>
+          <input type="number" id="rental-days" value="3" min="1" max="30" style="padding: 10px 14px; border: 1px solid var(--surface-border); border-radius: 10px;" onchange="updateCalc(${item.pricePerDay}, ${item.securityDeposit})"/>
+
+          <label style="font-size: 13px; font-weight: 700; margin-top: 6px;">Fulfillment:</label>
+          <select id="fulfillment" style="padding: 10px 14px; border: 1px solid var(--surface-border); border-radius: 10px;">
+            <option value="selfPickup">Self Pickup at ${item.location} (Free)</option>
+            <option value="ownerDelivery">Doorstep Express Delivery (+₹100)</option>
+          </select>
+
+          <div style="background: var(--bg); padding: 14px; border-radius: 12px; margin-top: 10px; font-size: 13px;" id="calc-summary">
+            <div>Rental Fee (3 days): <strong>₹${item.pricePerDay * 3}</strong></div>
+            <div>Refundable Deposit: <strong>₹${item.securityDeposit}</strong></div>
+            <div>Platform Fee & Taxes: <strong>₹${Math.round(item.pricePerDay * 3 * 0.05)}</strong></div>
+            <div style="font-size: 15px; font-weight: 800; color: var(--primary); margin-top: 6px; border-top: 1px solid #dbe8e0; padding-top: 6px;">
+              Total Escrow Payable: ₹${item.pricePerDay * 3 + item.securityDeposit + Math.round(item.pricePerDay * 3 * 0.05)}
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="confirmBooking('${item.id}')">Confirm & Pay via UPI</button>
+        </div>
+      `;
+      modal.style.display = 'flex';
+    }
+
+    function updateCalc(dailyRate, deposit) {
+      const days = parseInt(document.getElementById('rental-days').value) || 1;
+      const rentalFee = dailyRate * days;
+      const tax = Math.round(rentalFee * 0.05);
+      const total = rentalFee + deposit + tax;
+      document.getElementById('calc-summary').innerHTML = `
+        <div>Rental Fee (${days} day${days > 1 ? 's' : ''}): <strong>₹${rentalFee}</strong></div>
+        <div>Refundable Deposit: <strong>₹${deposit}</strong></div>
+        <div>Platform Fee & Taxes: <strong>₹${tax}</strong></div>
+        <div style="font-size: 15px; font-weight: 800; color: var(--primary); margin-top: 6px; border-top: 1px solid #dbe8e0; padding-top: 6px;">
+          Total Escrow Payable: ₹${total}
+        </div>
+      `;
+    }
+
+    async function confirmBooking(listingId) {
+      const item = allListings.find(l => l.id === listingId);
+      const days = parseInt(document.getElementById('rental-days').value) || 1;
+      const fulfillment = document.getElementById('fulfillment').value;
+      const rentalFee = item.pricePerDay * days;
+      const deliveryFee = fulfillment === 'ownerDelivery' ? 100 : 0;
+      const taxes = Math.round(rentalFee * 0.05);
+      const totalPayable = rentalFee + item.securityDeposit + deliveryFee + taxes;
+
+      const payload = {
+        listingId: item.id,
+        listingTitle: item.title,
+        listingImage: item.imageUrls[0],
+        renterId: 'USER-1',
+        renterName: 'Alex Johnson',
+        ownerId: item.ownerId,
+        ownerName: item.ownerName,
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * days).toISOString(),
+        durationDays: days,
+        fulfillmentMethod: fulfillment,
+        protectionPlan: 'standard',
+        dailyRate: item.pricePerDay,
+        rentalFee: rentalFee,
+        securityDeposit: item.securityDeposit,
+        deliveryFee: deliveryFee,
+        protectionFee: 49,
+        taxes: taxes,
+        totalPayable: totalPayable,
+        status: 'upcoming',
+        pickupCode: 'RB-' + Math.floor(1000 + Math.random() * 9000),
+        paymentMethod: 'UPI Instant',
+        paymentStatus: 'Paid',
+        location: item.location
+      };
+
+      try {
+        const res = await fetch('/api/bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const booking = await res.json();
+          alert(`🎉 Booking Confirmed!\n\nBooking ID: ${booking.id}\nPickup Code: ${booking.pickupCode}\nTotal Escrow Paid: ₹${booking.totalPayable}\n\nGear is reserved and ready for pickup.`);
+          closeModal();
+        }
+      } catch (e) {
+        alert('Booking error: ' + e.message);
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('rent-modal').style.display = 'none';
+    }
+
+    loadListings();
+  </script>
+</body>
+</html>
