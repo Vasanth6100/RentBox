@@ -430,8 +430,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _telemetryTile('Pending', '${_liveMetrics?['pendingApprovals'] ?? 2}', const Color(0xFFD97706)),
-                  _telemetryTile('Active Gear', '${_liveMetrics?['activeListings'] ?? 6}', const Color(0xFF005C42)),
+                  _telemetryTile('Catalog', '${_liveMetrics?['activeListings'] ?? 6}', const Color(0xFF005C42)),
+                  _telemetryTile('Owners', '${_liveMetrics?['registeredOwners'] ?? 3}', const Color(0xFFD97706)),
                   _telemetryTile('Rentals', '${_liveMetrics?['activeRentals'] ?? 1}', const Color(0xFF0284C7)),
                   _telemetryTile('Disputes', '${_liveMetrics?['openDisputesCount'] ?? 1}', const Color(0xFFDC2626)),
                 ],
@@ -509,9 +509,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                 MaterialPageRoute(builder: (_) => const AdminApprovalsScreen()),
               );
             },
-            icon: const Icon(Icons.gavel_rounded, color: Colors.white, size: 20),
+            icon: const Icon(Icons.inventory_2_rounded, color: Colors.white, size: 20),
             label: Text(
-              'Inspect Approvals Queue in App',
+              'Inspect Gear Catalog & Moderation',
               style: GoogleFonts.plusJakartaSans(fontSize: 14.5, fontWeight: FontWeight.w700, color: Colors.white),
             ),
             style: ElevatedButton.styleFrom(

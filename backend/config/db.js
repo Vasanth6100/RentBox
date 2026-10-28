@@ -29,14 +29,15 @@ const resolveDbConfig = () => {
       password = decodeURIComponent(parsed.password || '');
       database = (parsed.pathname || '').replace(/^\//, '') || database;
 
-      if (parsed.searchParams.has('ssl') || process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production') {
+      const isInternal = host.includes('railway.internal') || host === 'localhost' || host === '127.0.0.1';
+      if (!isInternal && (parsed.searchParams.has('ssl') || process.env.DB_SSL === 'true')) {
         const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true';
         ssl = { rejectUnauthorized };
       }
     } catch (e) {
       console.warn('[RentBox DB] Could not parse DATABASE_URL string, falling back to individual env variables:', e.message);
     }
-  } else if (process.env.DB_SSL === 'true') {
+  } else if (process.env.DB_SSL === 'true' && !host.includes('railway.internal')) {
     const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true';
     ssl = { rejectUnauthorized };
   }
@@ -44,7 +45,21 @@ const resolveDbConfig = () => {
   return { host, port, user, password, database, ssl };
 };
 
+let isInitializing = false;
+let isInitialized = false;
+
 const initDbConnection = async () => {
+  if (isInitialized && (pool || sqliteDb)) {
+    return;
+  }
+  if (isInitializing) {
+    while (isInitializing) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return;
+  }
+  isInitializing = true;
+
   const config = resolveDbConfig();
 
   try {
@@ -75,7 +90,8 @@ const initDbConnection = async () => {
       database: config.database,
       ssl: config.ssl,
       waitForConnections: true,
-      connectionLimit: 15,
+      connectionLimit: 10,
+      enableKeepAlive: true,
       queueLimit: 0,
       multipleStatements: true,
       dateStrings: true
@@ -85,6 +101,8 @@ const initDbConnection = async () => {
     const [test] = await pool.query('SELECT 1 as connected');
     if (test && test[0].connected === 1) {
       isUsingMySQL = true;
+      isInitialized = true;
+      isInitializing = false;
       console.log(`[RentBox DB] Connected to MySQL server at ${config.host}:${config.port}, database: ${config.database}${config.ssl ? ' (SSL enabled)' : ''}`);
 
       // Auto-run schema migrations if tables do not exist
@@ -93,7 +111,26 @@ const initDbConnection = async () => {
         if (tables.length === 0) {
           console.log('[RentBox DB] Schema tables not detected. Automatically applying migrations...');
           const { runMigrations } = require('../scripts/migrate');
-          await runMigrations();
+          await runMigrations(true);
+
+          console.log('[RentBox DB] Automatically seeding initial catalog and admin accounts...');
+          const { seedDatabase } = require('../scripts/seed');
+          await seedDatabase(false, true);
+        }
+
+        // Ensure all listings are active and admin approval is disabled
+        await pool.query("UPDATE listings SET status = 'active' WHERE status = 'pendingApproval'");
+        await pool.query(`
+          INSERT INTO platform_settings (setting_key, setting_value, description)
+          VALUES ('admin_approval_required', 'false', 'Listings go live instantly without approval')
+          ON DUPLICATE KEY UPDATE setting_value = 'false'
+        `);
+
+        // Ensure users table has password reset columns
+        try {
+          await pool.query("ALTER TABLE users ADD COLUMN password_reset_token VARCHAR(64) NULL, ADD COLUMN reset_token_expires DATETIME NULL");
+        } catch (_) {
+          // Columns may already exist
         }
       } catch (migErr) {
         console.warn('[RentBox DB] Auto-migration check warning:', migErr.message);
@@ -113,9 +150,12 @@ const initDbConnection = async () => {
     const dbPath = path.join(dbDir, 'rentbox.db');
     sqliteDb = new sqlite3.Database(dbPath);
     isUsingMySQL = false;
+    isInitialized = true;
     console.log(`[RentBox DB] Fallback SQLite database connected at: ${dbPath}`);
   } catch (sqliteErr) {
     console.error('[RentBox DB] Fatal: Failed to initialize any database driver:', sqliteErr);
+  } finally {
+    isInitializing = false;
   }
 };
 

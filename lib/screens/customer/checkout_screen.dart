@@ -73,12 +73,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  void _processPayment() {
+  void _processPayment() async {
     setState(() => _isProcessing = true);
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      final booking = AppStore.instance.createBooking(
+    try {
+      final booking = await AppStore.instance.createBooking(
         listing: widget.listing,
         startDate: _startDate,
         endDate: _endDate,
@@ -87,9 +86,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         paymentMethod: _paymentMethod,
       );
 
+      if (!mounted) return;
       setState(() => _isProcessing = false);
       _showSuccessDialog(booking);
-    });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to confirm booking: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 
   void _showSuccessDialog(BookingModel booking) {

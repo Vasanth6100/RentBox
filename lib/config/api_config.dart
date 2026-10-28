@@ -29,10 +29,10 @@ class ApiConfig {
   /// Default production API endpoint when running in release/production mode
   /// without an explicit --dart-define=API_URL flag.
   /// Update this to your deployed domain (e.g. on Railway, Render, Fly.io, or VPS).
-  static const String defaultProductionApiUrl = 'https://rentbox-api.up.railway.app/api';
+  static const String defaultProductionApiUrl = 'https://rentbox-api-production.up.railway.app/api';
 
-  /// Local development IP for physical Android testing over local Wi-Fi.
-  static String activeLocalHost = '192.168.96.168';
+  /// Local development IP for Android emulator (10.0.2.2 maps to host localhost).
+  static String activeLocalHost = '10.0.2.2';
 
   /// Optional runtime override (useful for runtime testing or custom server settings).
   static String? runtimeBaseUrlOverride;

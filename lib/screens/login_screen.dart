@@ -32,14 +32,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _fillDemoCredentials(String email, String pass) {
-    setState(() {
-      _emailPhoneController.text = email;
-      _passwordController.text = pass;
-      _errorMessage = null;
-    });
-  }
-
   void _handleLogin() async {
     final identifier = _emailPhoneController.text.trim();
     final password = _passwordController.text.trim();
@@ -365,41 +357,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
 
-                    const SizedBox(height: 14),
-
-                    // Quick 1-tap demo credentials
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Quick Fill: ',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF678175),
-                          ),
-                        ),
-                        ActionChip(
-                          avatar: const Icon(Icons.person_outline, size: 14, color: Color(0xFF005C42)),
-                          label: const Text('Vasanth (User)'),
-                          labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF005C42)),
-                          backgroundColor: const Color(0xFFE2EFE7),
-                          side: const BorderSide(color: Color(0xFFC4DFD1)),
-                          onPressed: () => _fillDemoCredentials('vasanth@rentbox.in', 'RentBox@2026'),
-                        ),
-                        const SizedBox(width: 8),
-                        ActionChip(
-                          avatar: const Icon(Icons.admin_panel_settings_outlined, size: 14, color: Color(0xFF005C42)),
-                          label: const Text('Admin'),
-                          labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF005C42)),
-                          backgroundColor: const Color(0xFFE2EFE7),
-                          side: const BorderSide(color: Color(0xFFC4DFD1)),
-                          onPressed: () => _fillDemoCredentials('admin@rentbox.in', 'Admin@2026'),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
 
                     // Login button
                     SizedBox(

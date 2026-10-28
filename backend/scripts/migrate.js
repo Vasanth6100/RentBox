@@ -2,9 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const { initDbConnection, query, isMySQL } = require('../config/db');
 
-const runMigrations = async () => {
+const runMigrations = async (skipInit = false) => {
   console.log('[RentBox Migrations] Starting database migration...');
-  await initDbConnection();
+  if (!skipInit) {
+    await initDbConnection();
+  }
 
   const migrationFile = path.join(__dirname, '..', 'migrations', '001_create_schema.sql');
   const sql = fs.readFileSync(migrationFile, 'utf8');

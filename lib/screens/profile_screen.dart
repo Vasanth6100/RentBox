@@ -9,8 +9,8 @@ import 'owner/list_item_wizard_screen.dart';
 import 'owner/my_listings_screen.dart';
 import 'owner/owner_bookings_screen.dart';
 import 'owner/earnings_payouts_screen.dart';
-import 'admin/admin_dashboard_screen.dart';
 import 'login_screen.dart';
+import '../services/app_update_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -267,13 +267,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 const SizedBox(height: 24),
 
-                // Section: Platform Administration (High Visibility)
-                _buildSectionTitle('Platform Administration'),
-                const SizedBox(height: 10),
-                _buildAdminCommandTile(),
-
-                const SizedBox(height: 24),
-
                 // Section: Preferences & Safety
                 _buildSectionTitle('Settings & Safety'),
                 const SizedBox(height: 10),
@@ -297,6 +290,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SnackBar(content: Text('Support helpline: support@rentbox.in')),
                     );
                   },
+                ),
+                const SizedBox(height: 12),
+
+                // App Version & Check Updates
+                _buildMenuTile(
+                  icon: Icons.system_update_rounded,
+                  title: 'Check for Updates',
+                  subtitle: 'Current Version: v${AppUpdateService.currentVersion}',
+                  onTap: () => AppUpdateService.instance.checkForUpdate(context, manual: true),
                 ),
 
                 const SizedBox(height: 26),
@@ -400,94 +402,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildAdminCommandTile() {
-    return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-        );
-      },
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF004D36), Color(0xFF007A57)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF004D36).withValues(alpha: 0.28),
-              blurRadius: 14,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white, size: 24),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Admin Command Center',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFD700),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'PORTAL',
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF332000),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'Approvals queue, disputes, fleet & user KYC',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      color: const Color(0xFFD4F3E4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.white70),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildLogoutButton() {
     return SizedBox(
       width: double.infinity,
@@ -549,6 +463,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
+              AppStore.instance.logout();
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const LoginScreen()),

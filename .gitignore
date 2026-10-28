@@ -56,4 +56,6 @@ backend/public/rentbox.apk
 *.png
 .windows_bak/
 build/
+*.apk
+rentbox.apk
 

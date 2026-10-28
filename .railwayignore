@@ -1,0 +1,17 @@
+node_modules
+backend/node_modules
+build
+android
+ios
+linux
+macos
+windows
+.dart_tool
+*.apk
+*.map
+*.symbols
+*.png
+*.log
+.git
+.env
+backend/.env

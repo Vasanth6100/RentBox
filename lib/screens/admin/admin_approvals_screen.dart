@@ -14,8 +14,16 @@ class AdminApprovalsScreen extends StatefulWidget {
 }
 
 class _AdminApprovalsScreenState extends State<AdminApprovalsScreen> {
-  String _selectedFilter = 'Pending'; // Pending, Live, Rejected, All
+  String _selectedFilter = 'Live'; // Live, Paused, Rejected, All
   final _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppStore.instance.syncWithBackend();
+    });
+  }
 
   @override
   void dispose() {
@@ -30,8 +38,8 @@ class _AdminApprovalsScreenState extends State<AdminApprovalsScreen> {
       builder: (context, _) {
         final all = AppStore.instance.allListings;
         final filtered = all.where((l) {
-          if (_selectedFilter == 'Pending' && l.status != ListingStatus.pendingApproval) return false;
           if (_selectedFilter == 'Live' && l.status != ListingStatus.active) return false;
+          if (_selectedFilter == 'Paused' && l.status != ListingStatus.paused) return false;
           if (_selectedFilter == 'Rejected' && l.status != ListingStatus.rejected) return false;
 
           final q = _searchController.text.trim().toLowerCase();
@@ -86,7 +94,7 @@ class _AdminApprovalsScreenState extends State<AdminApprovalsScreen> {
           const RentBoxLogo(size: 26, badgeType: LogoBadgeType.none, isCircle: false),
           const SizedBox(width: 8),
           Text(
-            'Listing Approvals',
+            'Catalog Moderation',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 16.5,
               fontWeight: FontWeight.w800,
@@ -98,10 +106,13 @@ class _AdminApprovalsScreenState extends State<AdminApprovalsScreen> {
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh_rounded, color: AppColors.textPrimary),
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Moderation queue refreshed.')),
-            );
+          onPressed: () async {
+            await AppStore.instance.syncWithBackend();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Catalog refreshed from shared database.')),
+              );
+            }
           },
         ),
       ],
@@ -163,7 +174,7 @@ class _AdminApprovalsScreenState extends State<AdminApprovalsScreen> {
   }
 
   Widget _buildFilterPills() {
-    final filters = ['Pending', 'Live', 'Rejected', 'All'];
+    final filters = ['Live', 'Paused', 'Rejected', 'All'];
 
     return Container(
       color: Colors.white,
@@ -327,79 +338,92 @@ class _AdminApprovalsScreenState extends State<AdminApprovalsScreen> {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                if (item.status == ListingStatus.pendingApproval) ...[
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _showRejectDialog(context, item),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFDC2626),
-                        side: const BorderSide(color: Color(0xFFFCA5A5)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        minimumSize: const Size(0, 38),
-                      ),
-                      child: const Text('Reject', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _showReshootDialog(context, item),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFD97706),
-                        side: const BorderSide(color: Color(0xFFFCD34D)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        minimumSize: const Size(0, 38),
-                      ),
-                      child: const Text('Reshoot', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        AppStore.instance.approveListing(item.id);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('"${item.title}" approved and live!'),
-                            backgroundColor: AppColors.primary,
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: item.status == ListingStatus.active
+                              ? const Color(0xFFE8F5EE)
+                              : (item.status == ListingStatus.paused ? const Color(0xFFFEF3C7) : const Color(0xFFFEE2E2)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          item.status == ListingStatus.active
+                              ? '✓ Live on Explore'
+                              : (item.status == ListingStatus.paused ? '⏸ Paused' : '✕ Moderated'),
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: item.status == ListingStatus.active
+                                ? AppColors.primary
+                                : (item.status == ListingStatus.paused ? const Color(0xFFD97706) : const Color(0xFFDC2626)),
                           ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        minimumSize: const Size(0, 38),
+                        ),
                       ),
-                      child: const Text('Approve Listing', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                    ),
+                    ],
                   ),
-                ] else ...[
-                  Expanded(
-                    child: Text(
-                      item.status == ListingStatus.active
-                          ? '✓ Live & bookable on RentBox'
-                          : '✕ Rejected (${item.rejectionReason ?? "Issue"})',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: item.status == ListingStatus.active ? AppColors.primary : const Color(0xFFDC2626),
-                      ),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _confirmDelete(context, item),
-                    icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFDC2626)),
-                    label: const Text('Delete', style: TextStyle(color: Color(0xFFDC2626), fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+                if (item.status == ListingStatus.active) ...[
+                  OutlinedButton(
+                    onPressed: () {
+                      AppStore.instance.toggleListingPause(item.id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('"${item.title}" paused.')),
+                      );
+                    },
                     style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFD97706),
+                      side: const BorderSide(color: Color(0xFFFCD34D)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      minimumSize: const Size(0, 34),
+                    ),
+                    child: const Text('Pause', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: () => _showRejectDialog(context, item),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFDC2626),
                       side: const BorderSide(color: Color(0xFFFCA5A5)),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      minimumSize: const Size(0, 34),
                     ),
+                    child: const Text('Reject', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                ] else if (item.status == ListingStatus.paused) ...[
+                  ElevatedButton(
+                    onPressed: () {
+                      AppStore.instance.toggleListingPause(item.id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('"${item.title}" re-activated!'),
+                          backgroundColor: AppColors.primary,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      minimumSize: const Size(0, 34),
+                    ),
+                    child: const Text('Activate', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
                   ),
                 ],
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _confirmDelete(context, item),
+                  icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFDC2626)),
+                  label: const Text('Delete', style: TextStyle(color: Color(0xFFDC2626), fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFFCA5A5)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
               ],
             ),
           ),
@@ -567,36 +591,6 @@ class _AdminApprovalsScreenState extends State<AdminApprovalsScreen> {
             },
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
             child: const Text('Confirm Rejection', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showReshootDialog(BuildContext context, ListingModel item) {
-    final reshootCtrl = TextEditingController(text: 'Please upload sharp photo of camera sensor and lens mount.');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Request Reshoot'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Specify which angles need new photos:', style: const TextStyle(fontSize: 12)),
-            const SizedBox(height: 10),
-            TextField(controller: reshootCtrl, maxLines: 2, decoration: const InputDecoration(hintText: 'Instructions...')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              AppStore.instance.requestReshoot(item.id, reshootCtrl.text.trim());
-              Navigator.pop(ctx);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD97706)),
-            child: const Text('Send Reshoot Request', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

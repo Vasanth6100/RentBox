@@ -13,33 +13,23 @@ class AppStore extends ChangeNotifier {
   factory AppStore() => instance;
 
   AppStore._internal() {
-    _initSeedData();
-    syncWithBackend();
+    _initCurrentUser();
+    initAndSync();
+  }
+
+  Future<void> initAndSync() async {
+    await ApiService.instance.checkHealth();
+    await syncWithBackend();
   }
 
   Future<void> syncWithBackend() async {
     try {
-      final isOnline = await ApiService.instance.checkHealth();
-      if (!isOnline) return;
+      _listings = await ApiService.instance.getListings();
+      _bookings = await ApiService.instance.getBookings();
+      _disputes = await ApiService.instance.getDisputes();
 
-      final backendListings = await ApiService.instance.getListings(userId: _currentUser.id);
-      if (backendListings.isNotEmpty) {
-        _listings = backendListings;
-      }
-
-      final backendBookings = await ApiService.instance.getBookings();
-      if (backendBookings.isNotEmpty) {
-        _bookings = backendBookings;
-      }
-
-      final backendDisputes = await ApiService.instance.getDisputes();
-      if (backendDisputes.isNotEmpty) {
-        _disputes = backendDisputes;
-      }
-
-      final backendNotifs = await ApiService.instance.getNotifications(_currentUser.id);
-      if (backendNotifs.isNotEmpty) {
-        _notifications = backendNotifs;
+      if (_currentUser.id.isNotEmpty) {
+        _notifications = await ApiService.instance.getNotifications(_currentUser.id);
       }
 
       notifyListeners();
@@ -64,7 +54,10 @@ class AppStore extends ChangeNotifier {
   // --- Getters ---
   List<ListingModel> get allListings => List.unmodifiable(_listings);
   List<ListingModel> get activeListings =>
-      _listings.where((l) => l.status == ListingStatus.active).toList();
+      _listings.where((l) =>
+          l.status != ListingStatus.rejected &&
+          l.status != ListingStatus.paused &&
+          l.status != ListingStatus.pendingApproval).toList();
   List<ListingModel> get pendingApprovalListings =>
       _listings.where((l) => l.status == ListingStatus.pendingApproval).toList();
   List<ListingModel> get myListings =>
@@ -91,6 +84,7 @@ class AppStore extends ChangeNotifier {
   void setCurrentUser(UserModel user) {
     _currentUser = user;
     notifyListeners();
+    syncWithBackend();
   }
 
   // --- Role Management ---
@@ -177,30 +171,54 @@ class AppStore extends ChangeNotifier {
     return _currentUser.favoriteListingIds.contains(listingId);
   }
 
-  // --- Listings Operations ---
-  Future<ListingModel?> addListing(ListingModel listing) async {
-    _listings.insert(0, listing);
-    _addNotification(
-      title: 'Listing Submitted',
-      message: '"${listing.title}" is now added to RentBox.',
-      type: NotificationType.listingApproval,
+  void logout() {
+    ApiService.instance.authToken = null;
+    _currentUser = UserModel(
+      id: '',
+      name: 'Guest User',
+      email: '',
+      phone: '',
+      avatarUrl: 'assets/images/avatar.jpg',
+      location: 'Mumbai, Maharashtra',
+      activeRole: UserRole.customer,
+      joinedDate: DateTime.now(),
+      favoriteListingIds: [],
     );
     notifyListeners();
+    syncWithBackend();
+  }
 
+  // --- Listings Operations ---
+  Future<ListingModel?> addListing(ListingModel listing) async {
+    final activeListing = listing.copyWith(status: ListingStatus.active);
+
+    // 1. Post directly to central backend to persist to database
+    ListingModel? backendCreated;
     try {
-      final backendCreated = await ApiService.instance.createListing(listing);
-      if (backendCreated != null) {
-        final idx = _listings.indexWhere((l) => l.id == listing.id);
-        if (idx != -1) {
-          _listings[idx] = backendCreated;
-        }
-        notifyListeners();
-        return backendCreated;
-      }
+      backendCreated = await ApiService.instance.createListing(activeListing);
     } catch (e) {
       debugPrint('AppStore.addListing backend error: $e');
     }
-    return listing;
+
+    final finalListing = backendCreated ?? activeListing;
+
+    final existingIdx = _listings.indexWhere((l) => l.id == finalListing.id || l.id == listing.id);
+    if (existingIdx != -1) {
+      _listings[existingIdx] = finalListing;
+    } else {
+      _listings.insert(0, finalListing);
+    }
+
+    _addNotification(
+      title: 'Item Listed Live! ðŸŽ‰',
+      message: '"${finalListing.title}" is now published and live for everyone on RentBox.',
+      type: NotificationType.booking,
+    );
+    notifyListeners();
+
+    // 2. Refresh store from global shared database
+    await syncWithBackend();
+    return finalListing;
   }
 
   void approveListing(String listingId) {
@@ -211,7 +229,7 @@ class AppStore extends ChangeNotifier {
         rejectionReason: null,
       );
       _addNotification(
-        title: 'Listing Approved! 🎉',
+        title: 'Listing Approved! ðŸŽ‰',
         message: '"${_listings[index].title}" is now live and bookable in Mumbai.',
         type: NotificationType.listingApproval,
       );
@@ -241,7 +259,6 @@ class AppStore extends ChangeNotifier {
     final index = _listings.indexWhere((l) => l.id == listingId);
     if (index != -1) {
       _listings[index] = _listings[index].copyWith(
-        status: ListingStatus.pendingApproval,
         rejectionReason: 'Reshoot requested: $instructions',
       );
       _addNotification(
@@ -279,14 +296,14 @@ class AppStore extends ChangeNotifier {
   }
 
   // --- Booking Operations ---
-  BookingModel createBooking({
+  Future<BookingModel> createBooking({
     required ListingModel listing,
     required DateTime startDate,
     required DateTime endDate,
     required FulfillmentMethod fulfillmentMethod,
     required ProtectionPlan protectionPlan,
     required String paymentMethod,
-  }) {
+  }) async {
     final durationDays = endDate.difference(startDate).inDays.clamp(1, 365);
     final rentalFee = listing.pricePerDay * durationDays;
     final securityDeposit = listing.securityDeposit;
@@ -302,13 +319,13 @@ class AppStore extends ChangeNotifier {
     final bookingId = 'RB-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     final pickupCode = 'RB-${(1000 + (DateTime.now().microsecond % 9000))}';
 
-    final newBooking = BookingModel(
+    final localBooking = BookingModel(
       id: bookingId,
       listingId: listing.id,
       listingTitle: listing.title,
-      listingImage: listing.imageUrls.first,
-      renterId: _currentUser.id,
-      renterName: _currentUser.name,
+      listingImage: listing.imageUrls.isNotEmpty ? listing.imageUrls.first : 'assets/images/camera.jpg',
+      renterId: _currentUser.id.isNotEmpty ? _currentUser.id : 'USER-1',
+      renterName: _currentUser.name.isNotEmpty ? _currentUser.name : 'Verified Customer',
       ownerId: listing.ownerId,
       ownerName: listing.ownerName,
       startDate: startDate,
@@ -331,17 +348,32 @@ class AppStore extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
 
-    _bookings.insert(0, newBooking);
+    // Save to central backend database
+    BookingModel? backendBooking;
+    try {
+      backendBooking = await ApiService.instance.createBooking(localBooking);
+    } catch (e) {
+      debugPrint('AppStore.createBooking backend error: $e');
+    }
+
+    final confirmedBooking = backendBooking ?? localBooking;
+
+    final existingIdx = _bookings.indexWhere((b) => b.id == confirmedBooking.id || b.id == localBooking.id);
+    if (existingIdx != -1) {
+      _bookings[existingIdx] = confirmedBooking;
+    } else {
+      _bookings.insert(0, confirmedBooking);
+    }
 
     _addNotification(
-      title: 'Booking Confirmed! 📦',
-      message: 'Your rental for "${listing.title}" is booked. Pickup Code: $pickupCode',
+      title: 'Booking Confirmed! ðŸ“¦',
+      message: 'Your rental for "${listing.title}" is booked. Pickup Code: ${confirmedBooking.pickupCode}',
       type: NotificationType.booking,
     );
 
     notifyListeners();
-    ApiService.instance.createBooking(newBooking);
-    return newBooking;
+    await syncWithBackend();
+    return confirmedBooking;
   }
 
   void cancelBooking(String bookingId) {
@@ -349,7 +381,7 @@ class AppStore extends ChangeNotifier {
     if (index != -1) {
       _bookings[index] = _bookings[index].copyWith(
         status: BookingStatus.cancelled,
-        paymentStatus: 'Refunded (₹${_bookings[index].totalPayable.toStringAsFixed(0)})',
+        paymentStatus: 'Refunded (â‚¹${_bookings[index].totalPayable.toStringAsFixed(0)})',
       );
       _addNotification(
         title: 'Booking Cancelled',
@@ -374,8 +406,8 @@ class AppStore extends ChangeNotifier {
     if (index != -1) {
       _bookings[index] = _bookings[index].copyWith(status: BookingStatus.completed);
       _addNotification(
-        title: 'Rental Completed & Deposit Returned 🛡️',
-        message: 'Security deposit of ₹${_bookings[index].securityDeposit.toStringAsFixed(0)} returned to source account.',
+        title: 'Rental Completed & Deposit Returned ðŸ›¡ï¸',
+        message: 'Security deposit of â‚¹${_bookings[index].securityDeposit.toStringAsFixed(0)} returned to source account.',
         type: NotificationType.payment,
       );
       notifyListeners();
@@ -388,8 +420,8 @@ class AppStore extends ChangeNotifier {
       _bookings[index] = _bookings[index].copyWith(status: status);
       if (status == BookingStatus.completed) {
         _addNotification(
-          title: 'Rental Completed & Deposit Returned 🛡️',
-          message: 'Security deposit of ₹${_bookings[index].securityDeposit.toStringAsFixed(0)} returned.',
+          title: 'Rental Completed & Deposit Returned ðŸ›¡ï¸',
+          message: 'Security deposit of â‚¹${_bookings[index].securityDeposit.toStringAsFixed(0)} returned.',
           type: NotificationType.payment,
         );
       }
@@ -579,420 +611,25 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Initial Seed Data ---
-  void _initSeedData() {
+  // --- Initialize Guest User (no dummy data) ---
+  void _initCurrentUser() {
     _currentUser = UserModel(
-      id: 'USER-1',
-      name: 'Vasanth Kumar',
-      email: 'vasanth@rentbox.in',
-      phone: '+91 98765 43210',
+      id: '',
+      name: 'Guest User',
+      email: '',
+      phone: '',
       avatarUrl: 'assets/images/avatar.jpg',
       location: 'Mumbai, Maharashtra',
       activeRole: UserRole.customer,
-      joinedDate: DateTime(2024, 1, 15),
-      favoriteListingIds: ['item-1', 'item-2'],
+      joinedDate: DateTime.now(),
+      favoriteListingIds: [],
     );
 
-    _listings = [
-      ListingModel(
-        id: 'LIST-1',
-        title: 'Sony Alpha Camera',
-        category: 'Cameras',
-        pricePerDay: 700.0,
-        securityDeposit: 3000.0,
-        brand: 'Sony',
-        modelName: 'Alpha A7 IV',
-        condition: 'Like New',
-        description:
-            'Professional 33MP Full-Frame mirrorless camera with 4K 60p 10-bit recording. Perfect for weddings, corporate shoots, and cinematic travel vlogs.',
-        specifications: {
-          'Sensor': '33MP Full-Frame Exmor R',
-          'Video': '4K 60p 10-bit 4:2:2',
-          'Mount': 'Sony E-Mount',
-          'Autofocus': '759 AF points with Real-time Eye AF',
-          'Weight': '658g (Body only)',
-        },
-        includedItems: [
-          'Camera body',
-          '24–70 mm F2.8 GM lens',
-          '2x Sony NP-FZ100 Batteries',
-          '64 GB Fast SD card',
-          'Dual Charger & Carry Bag',
-        ],
-        imageUrls: [
-          'assets/images/camera.jpg',
-        ],
-        location: 'Bhiwandi, Mumbai',
-        distanceKm: 2.0,
-        ownerId: 'OWNER-1',
-        ownerName: 'Rajesh Sharma',
-        ownerAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-        ownerRating: 4.8,
-        ownerResponseTime: 'Replies in 15 mins',
-        isOwnerVerified: true,
-        status: ListingStatus.active,
-        createdAt: DateTime.now().subtract(const Duration(days: 12)),
-        rating: 4.8,
-        reviewsCount: 38,
-        deliveryCharge: 150.0,
-        isDeliveryAvailable: true,
-      ),
-      ListingModel(
-        id: 'LIST-2',
-        title: 'PS5 Console',
-        category: 'Gaming',
-        pricePerDay: 900.0,
-        securityDeposit: 4000.0,
-        brand: 'Sony',
-        modelName: 'PlayStation 5 Disc Edition',
-        condition: 'Like New',
-        description:
-            'Next-gen Sony PlayStation 5 with lightning-fast SSD, ultra-high speed HDMI 2.1, and 2 DualSense wireless controllers. Comes preloaded with popular titles.',
-        specifications: {
-          'Storage': '825GB Ultra-High Speed NVMe',
-          'Resolution': 'Up to 4K 120Hz & 8K HDR',
-          'Audio': 'Tempest 3D AudioTech',
-          'Controllers': '2x DualSense Haptic Feedback',
-        },
-        includedItems: [
-          'PS5 Console Disc Edition',
-          '2 DualSense Wireless Controllers',
-          'FIFA 24 & Spider-Man 2 Games',
-          'HDMI 2.1 Cable & Power Cord',
-        ],
-        imageUrls: [
-          'assets/images/ps5.jpg',
-        ],
-        location: 'Thane, Mumbai',
-        distanceKm: 3.5,
-        ownerId: 'OWNER-2',
-        ownerName: 'Aditya Nair',
-        ownerAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80',
-        ownerRating: 4.9,
-        ownerResponseTime: 'Replies in 10 mins',
-        isOwnerVerified: true,
-        status: ListingStatus.active,
-        createdAt: DateTime.now().subtract(const Duration(days: 20)),
-        rating: 4.9,
-        reviewsCount: 52,
-        deliveryCharge: 200.0,
-        isDeliveryAvailable: true,
-      ),
-      ListingModel(
-        id: 'LIST-3',
-        title: 'Epson Projector',
-        category: 'Projectors',
-        pricePerDay: 500.0,
-        securityDeposit: 2500.0,
-        brand: 'Epson',
-        modelName: 'Home Cinema Full HD 3800',
-        condition: 'Excellent',
-        description:
-            '3,800 Lumens Full HD cinema projector. Ideal for backyard movie nights, sports screenings, or office presentations with high ambient light.',
-        specifications: {
-          'Brightness': '3,800 ANSI Lumens',
-          'Native Resolution': '1080p Full HD (1920x1080)',
-          'Contrast Ratio': '16,000:1',
-          'Connectivity': '2x HDMI, USB, Audio Out',
-        },
-        includedItems: [
-          'Projector unit',
-          '10m HDMI Cable',
-          'Remote Control',
-          'Power Cord & Tripod adapter',
-        ],
-        imageUrls: [
-          'assets/images/projector.jpg',
-        ],
-        location: 'Dadar, Mumbai',
-        distanceKm: 4.2,
-        ownerId: 'OWNER-3',
-        ownerName: 'Vikram Mehta',
-        ownerAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&auto=format&fit=crop&q=80',
-        ownerRating: 4.7,
-        ownerResponseTime: 'Replies in 30 mins',
-        isOwnerVerified: true,
-        status: ListingStatus.active,
-        createdAt: DateTime.now().subtract(const Duration(days: 15)),
-        rating: 4.7,
-        reviewsCount: 19,
-        deliveryCharge: 150.0,
-        isDeliveryAvailable: true,
-      ),
-      ListingModel(
-        id: 'LIST-4',
-        title: 'JBL Party Speaker',
-        category: 'Audio',
-        pricePerDay: 800.0,
-        securityDeposit: 3000.0,
-        brand: 'JBL',
-        modelName: 'PartyBox 310',
-        condition: 'Like New',
-        description:
-            '240W RMS powerful JBL Pro Sound with synced dynamic light show. Features built-in wheels, telescopic handle, and 18-hour battery life.',
-        specifications: {
-          'Power Output': '240W RMS',
-          'Battery Life': 'Up to 18 Hours',
-          'Water Resistance': 'IPX4 Splashproof',
-          'Inputs': 'Mic/Guitar inputs with volume control',
-        },
-        includedItems: [
-          'JBL PartyBox 310',
-          'AC Power Cable',
-          'Wireless Microphone kit',
-        ],
-        imageUrls: [
-          'assets/images/speaker.jpg',
-        ],
-        location: 'Navi Mumbai',
-        distanceKm: 6.0,
-        ownerId: 'OWNER-1',
-        ownerName: 'Rajesh Sharma',
-        ownerAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-        ownerRating: 4.9,
-        ownerResponseTime: 'Replies in 15 mins',
-        isOwnerVerified: true,
-        status: ListingStatus.active,
-        createdAt: DateTime.now().subtract(const Duration(days: 8)),
-        rating: 4.9,
-        reviewsCount: 31,
-        deliveryCharge: 250.0,
-        isDeliveryAvailable: true,
-      ),
-      // --- Pending Admin Moderation Listings ---
-      ListingModel(
-        id: 'LIST-PENDING-1',
-        title: 'DJI Mini 4 Pro Drone',
-        category: 'Tech',
-        pricePerDay: 1200.0,
-        securityDeposit: 6000.0,
-        brand: 'DJI',
-        modelName: 'Mini 4 Pro Fly More Combo',
-        condition: 'Like New',
-        description:
-            'Under 249g ultra-light drone with omnidirectional obstacle sensing, 4K/60fps HDR video, and 20km video transmission. Verified owner with DGCA registration.',
-        specifications: {
-          'Weight': '249g',
-          'Video': '4K/60fps HDR, 4K/100fps Slow Motion',
-          'Flight Time': 'Up to 34 minutes per battery',
-        },
-        includedItems: [
-          'DJI Mini 4 Pro Drone',
-          'RC 2 Smart Controller with Screen',
-          '3x Intelligent Flight Batteries',
-          'Two-Way Charging Hub & Case',
-        ],
-        imageUrls: [
-          'assets/images/drone.jpg',
-        ],
-        location: 'Bandra West, Mumbai',
-        distanceKm: 5.1,
-        ownerId: 'OWNER-4',
-        ownerName: 'Kunal Verma',
-        ownerAvatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&auto=format&fit=crop&q=80',
-        ownerRating: 4.8,
-        status: ListingStatus.pendingApproval,
-        hasBill: true,
-        hasSerialVerified: true,
-        hasIdVerified: true,
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-        rating: 5.0,
-        reviewsCount: 6,
-      ),
-      ListingModel(
-        id: 'LIST-PENDING-2',
-        title: 'GoPro Hero 12 Black',
-        category: 'Cameras',
-        pricePerDay: 450.0,
-        securityDeposit: 2000.0,
-        brand: 'GoPro',
-        modelName: 'Hero 12 Creator Edition',
-        condition: 'Excellent',
-        description:
-            'Rugged waterproof action camera with HyperSmooth 6.0 video stabilization and 5.3K60 recording. Includes underwater housing and chest mount.',
-        specifications: {
-          'Resolution': '5.3K 60fps / 4K 120fps',
-          'Waterproof': '10m without housing / 60m with case',
-          'Stabilization': 'HyperSmooth 6.0 with AutoBoost',
-        },
-        includedItems: [
-          'GoPro Hero 12 Black',
-          '2x Enduro Batteries',
-          'Waterproof Dive Housing',
-          'Chest & Helmet Mounts',
-        ],
-        imageUrls: [
-          'assets/images/camera.jpg',
-        ],
-        location: 'Andheri East, Mumbai',
-        distanceKm: 7.2,
-        ownerId: 'OWNER-5',
-        ownerName: 'Priya Chawla',
-        ownerAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80',
-        ownerRating: 4.7,
-        status: ListingStatus.pendingApproval,
-        hasBill: true,
-        hasSerialVerified: false,
-        hasIdVerified: true,
-        createdAt: DateTime.now().subtract(const Duration(hours: 6)),
-        rating: 4.7,
-        reviewsCount: 14,
-      ),
-    ];
-
-    // Seed Bookings
-    _bookings = [
-      BookingModel(
-        id: 'RB-9842',
-        listingId: 'LIST-1',
-        listingTitle: 'Sony Alpha Camera',
-        listingImage: 'assets/images/camera.jpg',
-        renterId: _currentUser.id,
-        renterName: _currentUser.name,
-        ownerId: 'OWNER-1',
-        ownerName: 'Rajesh Sharma',
-        startDate: DateTime.now().add(const Duration(days: 2)),
-        endDate: DateTime.now().add(const Duration(days: 5)),
-        durationDays: 3,
-        fulfillmentMethod: FulfillmentMethod.ownerDelivery,
-        protectionPlan: ProtectionPlan.standard,
-        dailyRate: 700.0,
-        rentalFee: 2100.0,
-        securityDeposit: 3000.0,
-        deliveryFee: 150.0,
-        protectionFee: 99.0,
-        taxes: 105.0,
-        totalPayable: 5454.0,
-        status: BookingStatus.upcoming,
-        pickupCode: 'RB-9842',
-        paymentMethod: 'UPI (GPay)',
-        paymentStatus: 'Paid',
-        location: 'Bhiwandi, Mumbai',
-        createdAt: DateTime.now().subtract(const Duration(hours: 12)),
-      ),
-      BookingModel(
-        id: 'RB-8120',
-        listingId: 'LIST-2',
-        listingTitle: 'PS5 Console',
-        listingImage: 'assets/images/ps5.jpg',
-        renterId: _currentUser.id,
-        renterName: _currentUser.name,
-        ownerId: 'OWNER-2',
-        ownerName: 'Aditya Nair',
-        startDate: DateTime.now().subtract(const Duration(days: 1)),
-        endDate: DateTime.now().add(const Duration(days: 2)),
-        durationDays: 3,
-        fulfillmentMethod: FulfillmentMethod.selfPickup,
-        protectionPlan: ProtectionPlan.standard,
-        dailyRate: 900.0,
-        rentalFee: 2700.0,
-        securityDeposit: 4000.0,
-        deliveryFee: 0.0,
-        protectionFee: 99.0,
-        taxes: 135.0,
-        totalPayable: 6934.0,
-        status: BookingStatus.active,
-        pickupCode: 'RB-8120',
-        paymentMethod: 'Credit Card',
-        paymentStatus: 'Paid',
-        location: 'Thane, Mumbai',
-        createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      BookingModel(
-        id: 'RB-7341',
-        listingId: 'LIST-4',
-        listingTitle: 'JBL Party Speaker',
-        listingImage: 'assets/images/speaker.jpg',
-        renterId: _currentUser.id,
-        renterName: _currentUser.name,
-        ownerId: 'OWNER-1',
-        ownerName: 'Rajesh Sharma',
-        startDate: DateTime.now().subtract(const Duration(days: 10)),
-        endDate: DateTime.now().subtract(const Duration(days: 8)),
-        durationDays: 2,
-        fulfillmentMethod: FulfillmentMethod.selfPickup,
-        protectionPlan: ProtectionPlan.basic,
-        dailyRate: 800.0,
-        rentalFee: 1600.0,
-        securityDeposit: 3000.0,
-        deliveryFee: 0.0,
-        protectionFee: 49.0,
-        taxes: 80.0,
-        totalPayable: 4729.0,
-        status: BookingStatus.completed,
-        pickupCode: 'RB-7341',
-        paymentMethod: 'UPI',
-        paymentStatus: 'Deposit Refunded',
-        location: 'Navi Mumbai',
-        createdAt: DateTime.now().subtract(const Duration(days: 12)),
-        isReviewed: true,
-      ),
-    ];
-
-    // Seed Reviews
-    _reviews = [
-      ReviewModel(
-        id: 'REV-1',
-        listingId: 'LIST-1',
-        bookingId: 'RB-6101',
-        authorName: 'Sneha Patel',
-        authorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80',
-        rating: 5.0,
-        comment: 'Camera condition was super clean and sensor had zero dust. Owner gave helpful instructions!',
-        createdAt: DateTime.now().subtract(const Duration(days: 4)),
-      ),
-      ReviewModel(
-        id: 'REV-2',
-        listingId: 'LIST-1',
-        bookingId: 'RB-5982',
-        authorName: 'Manish Iyer',
-        authorAvatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=200&auto=format&fit=crop&q=80',
-        rating: 4.8,
-        comment: 'Great gear, batteries held full charge. Handover at Bhiwandi was seamless.',
-        createdAt: DateTime.now().subtract(const Duration(days: 14)),
-      ),
-    ];
-
-    // Seed Notifications
-    _notifications = [
-      NotificationModel(
-        id: 'N1',
-        title: 'Pickup Ready: Sony Alpha Camera',
-        message: 'Owner Rajesh Sharma confirmed your pickup slot for tomorrow 10:00 AM.',
-        type: NotificationType.booking,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 45)),
-      ),
-      NotificationModel(
-        id: 'N2',
-        title: 'Deposit Security Active 🛡️',
-        message: 'Your security deposit of ₹3,000 is safely held in RentBox Escrow.',
-        type: NotificationType.security,
-        timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-      NotificationModel(
-        id: 'N3',
-        title: 'New Review on Completed Rental',
-        message: 'Your rental for JBL PartyBox was marked complete. Leave a rating!',
-        type: NotificationType.reminder,
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-    ];
-
-    // Seed Disputes
-    _disputes = [
-      DisputeCaseModel(
-        id: 'DISP-1',
-        caseId: 'CASE-001',
-        bookingId: 'RB-6921',
-        itemTitle: 'DJI Ronin Gimbal',
-        renterName: 'Rohan Deshmukh',
-        ownerName: 'Amit Joshi',
-        reason: 'Minor Scratch on Handle',
-        description: 'Owner claimed ₹500 deduction for scratch. Renter states it was present during initial handover.',
-        status: DisputeStatus.open,
-        amountInvolved: 500.0,
-        createdAt: DateTime.now().subtract(const Duration(hours: 18)),
-      ),
-    ];
+    _listings = [];
+    _bookings = [];
+    _reviews = [];
+    _notifications = [];
+    _disputes = [];
   }
 }
+

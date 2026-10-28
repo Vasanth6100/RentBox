@@ -31,22 +31,31 @@ class ApiService {
 
   // --- Health Check ---
   Future<bool> checkHealth() async {
+    // 1. Try currently configured baseUrl
     try {
       final res = await http
           .get(Uri.parse('$baseUrl/health'))
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(milliseconds: 1500));
       if (res.statusCode == 200) return true;
     } catch (_) {}
 
-    // Auto-fallback in local development mode between physical device IP and emulator 10.0.2.2
-    if (!ApiConfig.isProduction && defaultTargetPlatform == TargetPlatform.android) {
-      final altHost = ApiConfig.activeLocalHost == '192.168.96.168' ? '10.0.2.2' : '192.168.96.168';
+    // 2. Proactively probe candidate working endpoints in order
+    final candidates = <String>[
+      if (defaultTargetPlatform == TargetPlatform.android) 'http://10.0.2.2:5000/api',
+      if (defaultTargetPlatform == TargetPlatform.android) 'http://10.253.0.168:5000/api',
+      'http://localhost:5000/api',
+      ApiConfig.defaultProductionApiUrl,
+    ];
+
+    for (final candidate in candidates) {
+      if (candidate == baseUrl) continue;
       try {
-        final altRes = await http
-            .get(Uri.parse('http://$altHost:5000/api/health'))
-            .timeout(const Duration(seconds: 2));
-        if (altRes.statusCode == 200) {
-          ApiConfig.activeLocalHost = altHost;
+        final res = await http
+            .get(Uri.parse('$candidate/health'))
+            .timeout(const Duration(milliseconds: 1500));
+        if (res.statusCode == 200) {
+          ApiConfig.runtimeBaseUrlOverride = candidate;
+          debugPrint('[RentBox API] Connected to live backend at: $candidate');
           return true;
         }
       } catch (_) {}
@@ -118,6 +127,83 @@ class ApiService {
       lastLoginError = 'Could not connect to backend server: $e';
     }
     return null;
+  }
+
+  Future<Map<String, dynamic>> requestPasswordReset({
+    required String emailOrPhone,
+    required bool isEmail,
+  }) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/auth/forgot-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          if (isEmail) 'email': emailOrPhone else 'phone': emailOrPhone,
+        }),
+      );
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return data;
+    } catch (e) {
+      debugPrint('ApiService.requestPasswordReset error: $e');
+      return {'success': false, 'error': 'Could not connect to server.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> resetPassword({
+    required String emailOrPhone,
+    required bool isEmail,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/auth/reset-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          if (isEmail) 'email': emailOrPhone else 'phone': emailOrPhone,
+          'code': code,
+          'newPassword': newPassword,
+        }),
+      );
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return data;
+    } catch (e) {
+      debugPrint('ApiService.resetPassword error: $e');
+      return {'success': false, 'error': 'Could not connect to server: $e'};
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getKycApplicants() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/admin/kyc/applicants'),
+        headers: headers,
+      );
+      if (res.statusCode == 200) {
+        final list = jsonDecode(res.body) as List<dynamic>;
+        return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+    } catch (e) {
+      debugPrint('ApiService.getKycApplicants error: $e');
+    }
+    return [];
+  }
+
+  Future<bool> updateKycStatus({
+    required String userId,
+    required String status,
+  }) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/admin/users/$userId/kyc'),
+        headers: headers,
+        body: jsonEncode({'status': status}),
+      );
+      return res.statusCode == 200;
+    } catch (e) {
+      debugPrint('ApiService.updateKycStatus error: $e');
+      return false;
+    }
   }
 
   // Dedicated Admin Authentication Verified with Backend
@@ -275,13 +361,16 @@ class ApiService {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/listings'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'id': listing.id,
           'title': listing.title,
           'category': listing.category,
           'pricePerDay': listing.pricePerDay,
           'securityDeposit': listing.securityDeposit,
+          'brand': listing.brand,
+          'modelName': listing.modelName,
+          'condition': listing.condition,
           'location': listing.location,
           'description': listing.description,
           'features': <String>[],
@@ -296,13 +385,15 @@ class ApiService {
           'deliveryCharge': listing.deliveryCharge,
           'minRentDays': 1,
           'maxRentDays': 30,
-          'status': listing.status.name,
+          'status': 'active',
           'createdAt': listing.createdAt.toIso8601String(),
         }),
       );
-      if (res.statusCode == 201) {
+      if (res.statusCode == 201 || res.statusCode == 200) {
         return _listingFromJson(
             jsonDecode(res.body) as Map<String, dynamic>);
+      } else {
+        debugPrint('ApiService.createListing failed: ${res.statusCode} ${res.body}');
       }
     } catch (e) {
       debugPrint('ApiService.createListing error: $e');
@@ -374,7 +465,7 @@ class ApiService {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/bookings'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'id': booking.id,
           'listingId': booking.listingId,
@@ -404,9 +495,11 @@ class ApiService {
           'createdAt': booking.createdAt.toIso8601String(),
         }),
       );
-      if (res.statusCode == 201) {
+      if (res.statusCode == 201 || res.statusCode == 200) {
         return _bookingFromJson(
             jsonDecode(res.body) as Map<String, dynamic>);
+      } else {
+        debugPrint('ApiService.createBooking failed: ${res.statusCode} ${res.body}');
       }
     } catch (e) {
       debugPrint('ApiService.createBooking error: $e');

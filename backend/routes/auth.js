@@ -227,10 +227,174 @@ router.get('/me', authenticateToken, async (req, res) => {
 });
 
 // -----------------------------------------------------------------
-// 5. LOGOUT
+// 5. FORGOT PASSWORD / RESET CODE REQUEST
+// -----------------------------------------------------------------
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email, phone } = req.body;
+    const identifier = (email || phone || '').trim();
+
+    if (!identifier) {
+      return res.status(400).json({ success: false, error: 'Email address or mobile number is required.' });
+    }
+
+    // Find user by email or phone
+    const rows = await query(
+      'SELECT id, name, email, phone FROM users WHERE email = ? OR phone = ?',
+      [identifier, identifier]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No account found with this ' + (email ? 'email address' : 'mobile number') + '. Please check and try again.'
+      });
+    }
+
+    const user = rows[0];
+
+    // Generate a 6-digit reset code and store it with 15-min expiry
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Store reset token in the DB (reuse password_reset_token column if exists, else use audit log)
+    try {
+      await query(
+        'UPDATE users SET password_reset_token = ?, reset_token_expires = ? WHERE id = ?',
+        [resetCode, expiresAt, user.id]
+      );
+    } catch (_) {
+      // Column may not exist — log it to audit trail instead
+      await query(`
+        INSERT INTO audit_logs (id, user_id, user_name, action, entity_type, entity_id, details)
+        VALUES (?, ?, ?, 'PASSWORD_RESET_REQUEST', 'USER', ?, ?)
+      `, [
+        'AUDIT-' + Date.now(),
+        user.id,
+        user.name,
+        user.id,
+        JSON.stringify({ resetCode, expiresAt })
+      ]);
+    }
+
+    // In production: send via email/SMS. For now, return success with a hint.
+    const maskedContact = email
+      ? user.email.replace(/(.{2}).*(@.*)/, '$1***$2')
+      : user.phone.replace(/(\+\d{2})\d+(\d{4})/, '$1*****$2');
+
+    return res.json({
+      success: true,
+      message: `A reset code has been sent to ${maskedContact}. Please check your ${email ? 'inbox' : 'SMS'}.`,
+      // In dev: include code so it can be tested without email setup
+      ...(process.env.NODE_ENV !== 'production' && { devCode: resetCode }),
+    });
+
+  } catch (err) {
+    console.error('[RentBox Auth] Forgot password error:', err);
+    return res.status(500).json({ success: false, error: 'Server error processing reset request.' });
+  }
+});
+
+// -----------------------------------------------------------------
+// 5B. VERIFY RESET CODE AND SET NEW PASSWORD
+// -----------------------------------------------------------------
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, phone, code, newPassword } = req.body;
+    const identifier = (email || phone || '').trim();
+    const resetCode = (code || '').toString().trim();
+    const password = (newPassword || '').trim();
+
+    if (!identifier) {
+      return res.status(400).json({ success: false, error: 'Email address or mobile number is required.' });
+    }
+    if (!resetCode) {
+      return res.status(400).json({ success: false, error: 'Verification code is required.' });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, error: 'New password must be at least 6 characters long.' });
+    }
+
+    let rows = [];
+    try {
+      rows = await query(
+        'SELECT id, name, email, phone, password_reset_token, reset_token_expires FROM users WHERE email = ? OR phone = ?',
+        [identifier, identifier]
+      );
+    } catch (_) {
+      rows = await query(
+        'SELECT id, name, email, phone FROM users WHERE email = ? OR phone = ?',
+        [identifier, identifier]
+      );
+    }
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'No account found with this credential.' });
+    }
+
+    const user = rows[0];
+
+    // Verify token
+    let isCodeValid = false;
+    if (user.password_reset_token && user.password_reset_token.toString().trim() === resetCode) {
+      if (!user.reset_token_expires || new Date(user.reset_token_expires) > new Date()) {
+        isCodeValid = true;
+      } else {
+        return res.status(400).json({ success: false, error: 'Verification code has expired. Please request a new one.' });
+      }
+    } else {
+      // Check audit logs fallback
+      try {
+        const auditRows = await query(`
+          SELECT details, created_at FROM audit_logs 
+          WHERE user_id = ? AND action = 'PASSWORD_RESET_REQUEST' 
+          ORDER BY created_at DESC LIMIT 1
+        `, [user.id]);
+        if (auditRows.length > 0) {
+          const details = typeof auditRows[0].details === 'string' ? JSON.parse(auditRows[0].details) : auditRows[0].details;
+          if (details && details.resetCode && details.resetCode.toString().trim() === resetCode) {
+            isCodeValid = true;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!isCodeValid) {
+      return res.status(400).json({ success: false, error: 'Invalid verification code. Please check and try again.' });
+    }
+
+    // Hash new password and update
+    const salt = await bcrypt.genSalt(10);
+    const newHash = await bcrypt.hash(password, salt);
+
+    try {
+      await query(
+        'UPDATE users SET password_hash = ?, password_reset_token = NULL, reset_token_expires = NULL, updated_at = NOW() WHERE id = ?',
+        [newHash, user.id]
+      );
+    } catch (_) {
+      await query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?', [newHash, user.id]);
+    }
+
+    // Record audit log
+    await recordAuditLog(user.id, user.name, 'PASSWORD_RESET_SUCCESS', 'USER', user.id, 'User successfully reset password using verification code.', req);
+
+    return res.json({
+      success: true,
+      message: 'Password reset successfully! You can now log in with your new password.'
+    });
+  } catch (err) {
+    console.error('[RentBox Auth] Reset password error:', err);
+    return res.status(500).json({ success: false, error: 'Server error resetting password.' });
+  }
+});
+
+// -----------------------------------------------------------------
+// 6. LOGOUT
 // -----------------------------------------------------------------
 router.post('/logout', (req, res) => {
   res.json({ success: true, message: 'Logged out successfully.' });
 });
 
 module.exports = router;
+

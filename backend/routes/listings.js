@@ -90,7 +90,7 @@ router.get('/', async (req, res) => {
         params.push(ownerId);
       }
     } else {
-      // Mobile app client query
+      // Mobile app client query & public marketplace
       if (ownerId) {
         sql += ' AND owner_id = ?';
         params.push(ownerId);
@@ -98,12 +98,15 @@ router.get('/', async (req, res) => {
           sql += ' AND status = ?';
           params.push(status);
         }
-      } else if (userId) {
-        // Include all active marketplace listings PLUS anything owned by current user
-        sql += ' AND (status = "active" OR owner_id = ?)';
-        params.push(userId);
       } else {
-        sql += ' AND status = "active"';
+        // Everyone on the internet sees all active published listings
+        if (status) {
+          sql += ' AND status = ?';
+          params.push(status);
+        } else {
+          // Only show active listings — no admin approval step exists
+          sql += ' AND status = "active"';
+        }
       }
     }
 
@@ -164,13 +167,28 @@ router.post('/', async (req, res) => {
     const b = req.body;
     const id = b.id || 'ITEM-' + Date.now().toString(36).toUpperCase();
 
-    // Check platform setting to determine default status
-    const settingRows = await query('SELECT setting_value FROM platform_settings WHERE setting_key = "admin_approval_required"');
-    const requiresApproval = settingRows.length === 0 || settingRows[0].setting_value === 'true';
-    const initialStatus = requiresApproval ? 'pendingApproval' : (b.status || 'active');
+    // All listings are published directly without admin approval
+    const initialStatus = 'active';
 
     const pricePerDay = parseFloat(b.pricePerDay || 0);
     const securityDeposit = parseFloat(b.securityDeposit || (pricePerDay * 4));
+
+    // Ensure owner_id exists in users table so foreign key constraint NEVER fails
+    const ownerId = b.ownerId || 'USER-1';
+    const ownerCheck = await query('SELECT id FROM users WHERE id = ?', [ownerId]);
+    if (ownerCheck.length === 0) {
+      await query(`
+        INSERT INTO users (id, name, email, phone, role, password_hash, location, is_verified, kyc_status)
+        VALUES (?, ?, ?, ?, 'owner', 'N/A', ?, 1, 'verified')
+        ON DUPLICATE KEY UPDATE name = VALUES(name)
+      `, [
+        ownerId,
+        b.ownerName || 'Verified Owner',
+        `${ownerId.toLowerCase()}@rentbox.in`,
+        b.ownerPhone || '',
+        b.location || 'Mumbai, Maharashtra'
+      ]);
+    }
 
     await query(`
       INSERT INTO listings (
@@ -179,6 +197,20 @@ router.post('/', async (req, res) => {
         distance_km, owner_id, owner_name, owner_avatar, owner_rating, owner_reviews_count,
         delivery_charge, is_instant_booking, is_delivery_available, status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        title = VALUES(title),
+        category = VALUES(category),
+        category_id = VALUES(category_id),
+        price_per_day = VALUES(price_per_day),
+        original_price = VALUES(original_price),
+        security_deposit = VALUES(security_deposit),
+        brand = VALUES(brand),
+        model_name = VALUES(model_name),
+        \`condition\` = VALUES(\`condition\`),
+        description = VALUES(description),
+        location = VALUES(location),
+        status = VALUES(status),
+        updated_at = NOW()
     `, [
       id,
       b.title || 'Untitled Equipment',
@@ -195,7 +227,7 @@ router.post('/', async (req, res) => {
       parseFloat(b.latitude || 19.0760),
       parseFloat(b.longitude || 72.8777),
       parseFloat(b.distanceKm || 2.0),
-      b.ownerId || 'USER-1',
+      ownerId,
       b.ownerName || 'Verified Owner',
       b.ownerAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
       parseFloat(b.ownerRating || 4.9),
@@ -205,6 +237,11 @@ router.post('/', async (req, res) => {
       b.isDeliveryAvailable ? 1 : 0,
       initialStatus
     ]);
+
+    // Clean existing related rows to avoid duplicate keys on re-insert
+    await query('DELETE FROM listing_images WHERE listing_id = ?', [id]);
+    await query('DELETE FROM product_specifications WHERE listing_id = ?', [id]);
+    await query('DELETE FROM listing_included_items WHERE listing_id = ?', [id]);
 
     // Insert Images
     const imageUrls = Array.isArray(b.imageUrls) ? b.imageUrls : [];
@@ -237,8 +274,8 @@ router.post('/', async (req, res) => {
     `, [
       'NOTIF-' + Date.now(),
       b.ownerId || 'USER-1',
-      'Listing Submitted to Moderation',
-      `"${b.title}" was submitted and is under review by RentBox administrators.`
+      'Listing Published! 🎉',
+      `"${b.title}" is now published and live for everyone on RentBox.`
     ]);
 
     const createdRows = await query('SELECT * FROM listings WHERE id = ?', [id]);

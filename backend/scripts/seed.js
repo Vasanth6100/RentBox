@@ -1,9 +1,11 @@
 const bcrypt = require('bcryptjs');
 const { initDbConnection, query } = require('../config/db');
 
-const seedDatabase = async (force = false) => {
+const seedDatabase = async (force = false, skipInit = false) => {
   console.log('[RentBox Seed] Starting database seeding...');
-  await initDbConnection();
+  if (!skipInit) {
+    await initDbConnection();
+  }
 
   const existingUsers = await query('SELECT COUNT(*) as cnt FROM users');
   if (existingUsers && existingUsers[0] && existingUsers[0].cnt > 0 && !force) {
@@ -319,7 +321,7 @@ const seedDatabase = async (force = false) => {
       owner_avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400',
       owner_rating: 4.70,
       owner_reviews_count: 5,
-      status: 'pendingApproval',
+      status: 'active',
       images: [
         'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=800'
       ],
@@ -382,7 +384,7 @@ const seedDatabase = async (force = false) => {
       owner_avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400',
       owner_rating: 4.95,
       owner_reviews_count: 38,
-      status: 'pendingApproval',
+      status: 'active',
       images: [
         'https://images.unsplash.com/photo-1564466809058-bf4114d55352?w=800'
       ],
@@ -639,7 +641,7 @@ const seedDatabase = async (force = false) => {
     ['protection_plan_basic_fee', '49.0', 'Basic protection plan fee in INR per rental'],
     ['protection_plan_standard_fee', '99.0', 'Standard protection plan fee in INR per rental'],
     ['max_rental_days', '30', 'Maximum duration for a single continuous rental booking in days'],
-    ['admin_approval_required', 'true', 'All newly created owner listings require administrator review before going public']
+    ['admin_approval_required', 'false', 'All newly created owner listings go live instantly without administrator review']
   ];
 
   for (const [k, v, desc] of settings) {

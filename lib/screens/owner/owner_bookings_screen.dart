@@ -35,18 +35,20 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Enter the 6-digit pickup code shown on the renter\'s app to confirm gear handover:',
+              'Enter the handover verification code shown on the renter\'s app to confirm gear handover:',
               style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 14),
             TextField(
               controller: _codeController,
-              keyboardType: TextInputType.number,
-              maxLength: 6,
+              textCapitalization: TextCapitalization.characters,
+              keyboardType: TextInputType.text,
+              maxLength: 10,
               textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 4),
               decoration: InputDecoration(
-                hintText: '000000',
+                hintText: 'e.g. RB-1234',
+                counterText: '',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
@@ -62,16 +64,31 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              if (_codeController.text.trim() == booking.pickupCode) {
+              final entered = _codeController.text.trim().toUpperCase();
+              final target = booking.pickupCode.trim().toUpperCase();
+              final cleanEntered = entered.replaceAll(RegExp(r'[^A-Z0-9]'), '').replaceAll('RB', '');
+              final cleanTarget = target.replaceAll(RegExp(r'[^A-Z0-9]'), '').replaceAll('RB', '');
+              final isMatch = entered == target ||
+                  (cleanEntered.isNotEmpty && cleanEntered == cleanTarget) ||
+                  entered == 'RB-$cleanTarget' ||
+                  'RB-$entered' == target;
+
+              if (isMatch) {
                 AppStore.instance.updateBookingStatus(booking.id, BookingStatus.active);
                 _codeController.clear();
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Handover confirmed! Rental is now active.')),
+                  const SnackBar(
+                    content: Text('Handover confirmed! Rental is now active.'),
+                    backgroundColor: Color(0xFF005C42),
+                  ),
                 );
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Invalid pickup code. Please check renter app.')),
+                  const SnackBar(
+                    content: Text('Invalid verification code. Please check renter app.'),
+                    backgroundColor: Colors.redAccent,
+                  ),
                 );
               }
             },

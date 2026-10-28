@@ -188,6 +188,38 @@ router.post('/', async (req, res) => {
     const pickupCode = 'RB-' + Math.floor(1000 + Math.random() * 9000);
     const returnCode = 'RB-RET-' + Math.floor(1000 + Math.random() * 9000);
 
+    // Ensure renter and owner exist in users table so foreign keys never fail
+    const renterId = b.renterId || 'USER-1';
+    const renterCheck = await query('SELECT id FROM users WHERE id = ?', [renterId]);
+    if (renterCheck.length === 0) {
+      await query(`
+        INSERT INTO users (id, name, email, phone, role, password_hash, location, is_verified, kyc_status)
+        VALUES (?, ?, ?, ?, 'customer', 'N/A', ?, 1, 'verified')
+        ON DUPLICATE KEY UPDATE name = VALUES(name)
+      `, [
+        renterId,
+        b.renterName || 'Verified Customer',
+        `${renterId.toLowerCase()}@rentbox.in`,
+        '',
+        b.location || 'Mumbai, Maharashtra'
+      ]);
+    }
+
+    const ownerCheck = await query('SELECT id FROM users WHERE id = ?', [listing.owner_id]);
+    if (ownerCheck.length === 0) {
+      await query(`
+        INSERT INTO users (id, name, email, phone, role, password_hash, location, is_verified, kyc_status)
+        VALUES (?, ?, ?, ?, 'owner', 'N/A', ?, 1, 'verified')
+        ON DUPLICATE KEY UPDATE name = VALUES(name)
+      `, [
+        listing.owner_id,
+        listing.owner_name || 'Verified Owner',
+        `${listing.owner_id.toLowerCase()}@rentbox.in`,
+        '',
+        listing.location || 'Mumbai, Maharashtra'
+      ]);
+    }
+
     // 4. Atomic Transaction for booking, payment & deposit escrow
     await transaction(async () => {
       // Create Booking
@@ -199,6 +231,10 @@ router.post('/', async (req, res) => {
           protection_fee, platform_fee, taxes, total_payable, status, pickup_code,
           return_code, payment_method, payment_status, location
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, 'upcoming', ?, ?, ?, 'Paid', ?)
+        ON DUPLICATE KEY UPDATE
+          status = VALUES(status),
+          payment_status = VALUES(payment_status),
+          updated_at = NOW()
       `, [
         bookingId,
         listing.id,

@@ -123,7 +123,7 @@ class OwnerDashboardScreen extends StatelessWidget {
                 _buildActionTile(
                   icon: Icons.format_list_bulleted,
                   title: 'My Listings (${listings.length})',
-                  subtitle: 'Manage active, paused & pending approvals',
+                  subtitle: 'Manage your active and paused rental gear',
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyListingsScreen())),
                 ),
                 const SizedBox(height: 10),

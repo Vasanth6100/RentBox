@@ -7,7 +7,10 @@ import 'screens/login_screen.dart';
 import 'screens/customer/explore_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 
-void main() {
+import 'services/api_service.dart';
+import 'services/app_store.dart';
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -15,6 +18,8 @@ void main() {
       statusBarIconBrightness: Brightness.dark,
     ),
   );
+  await ApiService.instance.checkHealth();
+  await AppStore.instance.syncWithBackend();
   runApp(const RentBoxApp());
 }
 

@@ -1,0 +1,10 @@
+node_modules
+*.apk
+*.wasm
+*.symbols
+*.map
+*.log
+.git
+.env
+public/app/
+public/rentbox.apk

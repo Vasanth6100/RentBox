@@ -19,7 +19,10 @@ class _MyListingsScreenState extends State<MyListingsScreen> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppStore.instance.syncWithBackend();
+    });
   }
 
   @override
@@ -34,8 +37,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with SingleTickerPr
       listenable: AppStore.instance,
       builder: (context, _) {
         final myListings = AppStore.instance.myListings;
-        final activeListings = myListings.where((l) => l.status == ListingStatus.active).toList();
-        final pendingListings = myListings.where((l) => l.status == ListingStatus.pendingApproval).toList();
+        final activeListings = myListings.where((l) => l.status != ListingStatus.paused).toList();
         final pausedListings = myListings.where((l) => l.status == ListingStatus.paused).toList();
 
         return Scaffold(
@@ -75,7 +77,6 @@ class _MyListingsScreenState extends State<MyListingsScreen> with SingleTickerPr
               labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
               tabs: [
                 Tab(text: 'Active (${activeListings.length})'),
-                Tab(text: 'Pending (${pendingListings.length})'),
                 Tab(text: 'Paused (${pausedListings.length})'),
               ],
             ),
@@ -84,7 +85,6 @@ class _MyListingsScreenState extends State<MyListingsScreen> with SingleTickerPr
             controller: _tabController,
             children: [
               _buildListingsList(activeListings, 'active'),
-              _buildListingsList(pendingListings, 'pending'),
               _buildListingsList(pausedListings, 'paused'),
             ],
           ),

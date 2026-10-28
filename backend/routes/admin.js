@@ -247,8 +247,48 @@ router.post('/users/:id/status', async (req, res) => {
 });
 
 // -----------------------------------------------------------------
-// E. KYC VERIFICATION QUEUE
+// E. KYC VERIFICATION QUEUE & APPLICANTS
 // -----------------------------------------------------------------
+router.get('/kyc/applicants', async (req, res) => {
+  try {
+    const rows = await query(`
+      SELECT 
+        u.id,
+        u.name,
+        u.email,
+        u.phone,
+        u.location,
+        u.avatar_url,
+        COALESCE(u.kyc_status, 'pending') as kycStatus,
+        COALESCE(v.document_type, u.id_document_type, 'Aadhaar / Gov ID') as idDocumentType,
+        v.document_number as idDocumentNumber,
+        v.document_url as documentUrl,
+        v.created_at as submittedAt
+      FROM users u
+      LEFT JOIN owner_verifications v ON u.id = v.user_id
+      ORDER BY u.created_at DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/users/:id/kyc', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { status } = req.body;
+    const validStatus = status === 'verified' ? 'verified' : (status === 'rejected' ? 'rejected' : 'pending');
+    await query('UPDATE users SET kyc_status = ? WHERE id = ?', [validStatus, userId]);
+    try {
+      await query('UPDATE owner_verifications SET status = ? WHERE user_id = ?', [validStatus === 'verified' ? 'approved' : 'rejected', userId]);
+    } catch (_) {}
+    res.json({ success: true, message: `KYC status updated to ${validStatus}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/kyc/queue', async (req, res) => {
   try {
     const { status } = req.query;

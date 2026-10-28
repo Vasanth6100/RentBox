@@ -17,7 +17,7 @@ class AdminDashboardScreen extends StatelessWidget {
     return ListenableBuilder(
       listenable: AppStore.instance,
       builder: (context, _) {
-        final pending = AppStore.instance.pendingApprovalListings;
+        final allListings = AppStore.instance.allListings;
         final allRentals = AppStore.instance.allBookings;
         final openDisputes = AppStore.instance.openDisputes;
         final grossRevenue = allRentals.fold<double>(0, (sum, b) => sum + b.totalPayable);
@@ -34,12 +34,12 @@ class AdminDashboardScreen extends StatelessWidget {
                 _buildSystemStatusStrip(),
                 const SizedBox(height: 14),
 
-                // Review Queue Banner
-                _buildReviewQueueBanner(context, pending.length),
+                // Live Catalog Banner
+                _buildReviewQueueBanner(context, allListings.length),
                 const SizedBox(height: 16),
 
                 // Metric Cards Grid
-                _buildMetricCards(grossRevenue, allRentals.length, pending.length, openDisputes.length),
+                _buildMetricCards(grossRevenue, allRentals.length, allListings.length, openDisputes.length),
                 const SizedBox(height: 20),
 
                 // Quick Actions
@@ -171,17 +171,17 @@ class AdminDashboardScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    'PRIORITY QUEUE',
+                    'LIVE CATALOG',
                     style: GoogleFonts.plusJakartaSans(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white),
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Listing Review Queue',
+                  'Active Equipment Catalog',
                   style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
                 ),
                 Text(
-                  '$pendingCount gear submissions awaiting verification & bill check.',
+                  '$pendingCount items published live across Mumbai for instant booking.',
                   style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFFD3EFE1)),
                 ),
               ],
@@ -204,7 +204,7 @@ class AdminDashboardScreen extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             ),
             child: Text(
-              'Inspect Queue',
+              'Manage Gear',
               style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w800),
             ),
           ),
@@ -213,7 +213,7 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMetricCards(double gross, int active, int pending, int disputes) {
+  Widget _buildMetricCards(double gross, int active, int totalListings, int disputes) {
     return Row(
       children: [
         Expanded(
@@ -221,7 +221,7 @@ class AdminDashboardScreen extends StatelessWidget {
             children: [
               _buildMetricCard('Gross Rentals', '₹${(gross / 1000).toStringAsFixed(1)}K', '+18.4% today', Icons.currency_rupee, const Color(0xFF10B981)),
               const SizedBox(height: 10),
-              _buildMetricCard('Pending Review', '$pending listings', 'Avg 18 mins SLA', Icons.rule_folder_outlined, const Color(0xFFF59E0B)),
+              _buildMetricCard('Total Catalog', '$totalListings items', 'Live on Explore', Icons.inventory_2_outlined, const Color(0xFF005C42)),
             ],
           ),
         ),
@@ -268,9 +268,9 @@ class AdminDashboardScreen extends StatelessWidget {
 
   Widget _buildQuickActions(BuildContext context) {
     final actions = [
-      {'title': 'Approve Listings', 'icon': Icons.checklist_rtl_rounded, 'screen': const AdminApprovalsScreen()},
+      {'title': 'Manage Catalog', 'icon': Icons.inventory_2_outlined, 'screen': const AdminApprovalsScreen()},
       {'title': 'KYC Verification', 'icon': Icons.verified_user_outlined, 'screen': const AdminKycScreen()},
-      {'title': 'Manage Rentals', 'icon': Icons.inventory_2_outlined, 'screen': const AdminRentalsScreen()},
+      {'title': 'Manage Rentals', 'icon': Icons.format_list_bulleted, 'screen': const AdminRentalsScreen()},
       {'title': 'Review Disputes', 'icon': Icons.shield_outlined, 'screen': const AdminDisputesScreen()},
     ];
 

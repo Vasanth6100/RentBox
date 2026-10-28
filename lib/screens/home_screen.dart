@@ -12,6 +12,7 @@ import 'customer/product_detail_screen.dart';
 import 'customer/map_view_screen.dart';
 import 'admin/admin_dashboard_screen.dart';
 import 'owner/list_item_wizard_screen.dart';
+import '../services/app_update_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,6 +37,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     AppStore.instance.syncWithBackend();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        AppUpdateService.instance.checkForUpdate(context);
+      }
+    });
   }
 
   final List<Map<String, dynamic>> _popularItems = [
@@ -115,46 +121,50 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildTopAppBar(),
                 Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 12),
-                        _buildGreetingSection(),
-                        const SizedBox(height: 16),
-                        _buildSearchBar(),
-                        const SizedBox(height: 16),
-                        _buildCategoriesList(),
-                        const SizedBox(height: 24),
-                        _buildSectionHeader(
-                          title: 'Popular near you',
-                          onSeeAll: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => const ExploreScreen()));
-                          },
-                        ),
-                        const SizedBox(height: 14),
-                        if (popularListings.isEmpty)
-                          ..._popularItems.map((item) => _buildPopularCard(item))
-                        else
-                          ...popularListings.map((listing) => _buildPopularListingCard(listing)),
-                        const SizedBox(height: 14),
-                        _buildSharingPromoBanner(),
-                        const SizedBox(height: 24),
-                        _buildSectionHeader(
-                          title: 'Trending',
-                          onSeeAll: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => const ExploreScreen()));
-                          },
-                        ),
-                        const SizedBox(height: 14),
-                        if (trendingListings.isEmpty)
-                          _buildTrendingList()
-                        else
-                          _buildDynamicTrendingList(trendingListings),
-                        const SizedBox(height: 30),
-                      ],
+                  child: RefreshIndicator(
+                    color: const Color(0xFF005C42),
+                    onRefresh: () => AppStore.instance.syncWithBackend(),
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 12),
+                          _buildGreetingSection(),
+                          const SizedBox(height: 16),
+                          _buildSearchBar(),
+                          const SizedBox(height: 16),
+                          _buildCategoriesList(),
+                          const SizedBox(height: 24),
+                          _buildSectionHeader(
+                            title: 'Popular near you',
+                            onSeeAll: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => const ExploreScreen()));
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                          if (popularListings.isEmpty)
+                            ..._popularItems.map((item) => _buildPopularCard(item))
+                          else
+                            ...popularListings.map((listing) => _buildPopularListingCard(listing)),
+                          const SizedBox(height: 14),
+                          _buildSharingPromoBanner(),
+                          const SizedBox(height: 24),
+                          _buildSectionHeader(
+                            title: 'Trending',
+                            onSeeAll: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => const ExploreScreen()));
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                          if (trendingListings.isEmpty)
+                            _buildTrendingList()
+                          else
+                            _buildDynamicTrendingList(trendingListings),
+                          const SizedBox(height: 30),
+                        ],
+                      ),
                     ),
                   ),
                 ),

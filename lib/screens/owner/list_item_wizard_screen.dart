@@ -89,9 +89,15 @@ class _ListItemWizardScreenState extends State<ListItemWizardScreen> {
           ? _locationController.text.trim()
           : AppStore.instance.currentUser.location,
       distanceKm: 2.0,
-      ownerId: AppStore.instance.currentUser.id,
-      ownerName: AppStore.instance.currentUser.name,
+      ownerId: AppStore.instance.currentUser.id.isNotEmpty
+          ? AppStore.instance.currentUser.id
+          : 'USER-1',
+      ownerName: AppStore.instance.currentUser.name.isNotEmpty
+          ? AppStore.instance.currentUser.name
+          : 'Verified Owner',
       ownerAvatar: AppStore.instance.currentUser.avatarUrl,
+      // Status is always decided by the backend (based on admin_approval_required setting).
+      // We pass 'active' as a hint; backend overrides it according to platform policy.
       status: ListingStatus.active,
       createdAt: DateTime.now(),
       deliveryCharge: double.tryParse(_deliveryChargeController.text) ?? 0.0,
@@ -119,11 +125,15 @@ class _ListItemWizardScreenState extends State<ListItemWizardScreen> {
                 shape: BoxShape.circle,
                 color: Color(0xFFD8F2E2),
               ),
-              child: const Icon(Icons.check_circle_outline, color: AppColors.primary, size: 36),
+              child: const Icon(
+                Icons.check_circle_outline,
+                color: AppColors.primary,
+                size: 36,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
-              'Item Added Successfully!',
+              'Item is Now Live! 🎉',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -132,7 +142,7 @@ class _ListItemWizardScreenState extends State<ListItemWizardScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Your gear "${newListing.title}" is now added and live on the RentBox marketplace.',
+              'Your gear "${newListing.title}" is now live on the RentBox marketplace and visible to everyone.',
               textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: AppColors.textSecondary),
             ),

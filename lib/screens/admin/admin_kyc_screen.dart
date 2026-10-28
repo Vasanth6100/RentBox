@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 
 class AdminKycScreen extends StatefulWidget {
@@ -10,38 +11,64 @@ class AdminKycScreen extends StatefulWidget {
 }
 
 class _AdminKycScreenState extends State<AdminKycScreen> {
-  final List<Map<String, dynamic>> _applicants = [
-    {
-      'id': 'KYC-01',
-      'name': 'Kunal Verma',
-      'phone': '+91 98201 11234',
-      'docType': 'Aadhaar Card + GSTIN',
-      'docNum': 'XXXX-XXXX-4912',
-      'status': 'Pending Verification',
-      'submitted': '2 hours ago',
-      'avatar': 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&auto=format&fit=crop&q=80',
-    },
-    {
-      'id': 'KYC-02',
-      'name': 'Priya Chawla',
-      'phone': '+91 98190 88231',
-      'docType': 'PAN Card + Utility Bill',
-      'docNum': 'ABCDE1234F',
-      'status': 'Pending Verification',
-      'submitted': '5 hours ago',
-      'avatar': 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80',
-    },
-    {
-      'id': 'KYC-03',
-      'name': 'Rajesh Sharma',
-      'phone': '+91 98765 12345',
-      'docType': 'Passport + Aadhaar',
-      'docNum': 'P9821345',
-      'status': 'Verified',
-      'submitted': '12 days ago',
-      'avatar': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-    },
-  ];
+  List<Map<String, dynamic>> _applicants = [];
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadKycApplicants();
+  }
+
+  Future<void> _loadKycApplicants() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final data = await ApiService.instance.getKycApplicants();
+      if (!mounted) return;
+      setState(() {
+        _applicants = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to load KYC applications.';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _updateKycStatus(Map<String, dynamic> a, String newStatus) async {
+    try {
+      await ApiService.instance.updateKycStatus(
+        userId: a['id'] as String,
+        status: newStatus,
+      );
+      if (!mounted) return;
+      setState(() => a['kycStatus'] = newStatus);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            newStatus == 'verified'
+                ? '${a['name']} KYC Approved!'
+                : '${a['name']} KYC Rejected.',
+          ),
+          backgroundColor: newStatus == 'verified'
+              ? const Color(0xFF005C42)
+              : Colors.redAccent,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to update KYC status.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,106 +89,196 @@ class _AdminKycScreenState extends State<AdminKycScreen> {
             color: AppColors.textPrimary,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: AppColors.primary),
+            onPressed: _loadKycApplicants,
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(18),
-        itemCount: _applicants.length,
-        itemBuilder: (context, i) {
-          final a = _applicants[i];
-          final isPending = a['status'] == 'Pending Verification';
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 14),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE4EDE7)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundImage: NetworkImage(a['avatar'] as String),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(_error!, style: GoogleFonts.plusJakartaSans(color: Colors.red)),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _loadKycApplicants,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              : _applicants.isEmpty
+                  ? Center(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(a['name'] as String, style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.bold)),
-                          Text('${a['phone']} • ${a['submitted']}', style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: AppColors.textSecondary)),
+                          const Icon(Icons.verified_user_outlined, size: 52, color: Color(0xFF9DC4B0)),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No KYC applications found.',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 15,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadKycApplicants,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(18),
+                        itemCount: _applicants.length,
+                        itemBuilder: (context, i) {
+                          final a = _applicants[i];
+                          final kycStatus = (a['kycStatus'] ?? a['kyc_status'] ?? 'pending') as String;
+                          final isPending = kycStatus == 'pending' || kycStatus == 'under_review';
+                          final statusLabel = isPending
+                              ? 'Pending Verification'
+                              : kycStatus == 'verified'
+                                  ? 'Verified'
+                                  : 'Rejected';
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFE4EDE7)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 22,
+                                      backgroundColor: const Color(0xFFE2EFE7),
+                                      backgroundImage: (a['avatarUrl'] ?? a['avatar_url'] ?? '') != ''
+                                          ? NetworkImage(a['avatarUrl'] ?? a['avatar_url'] ?? '')
+                                          : null,
+                                      child: (a['avatarUrl'] ?? a['avatar_url'] ?? '') == ''
+                                          ? Text(
+                                              ((a['name'] as String?) ?? 'U')[0].toUpperCase(),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.primary,
+                                              ),
+                                            )
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            a['name'] as String? ?? 'Unknown',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${a['phone'] ?? a['email'] ?? ''}',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 11.5,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: isPending
+                                            ? const Color(0xFFFEF3C7)
+                                            : kycStatus == 'verified'
+                                                ? const Color(0xFFD1FAE5)
+                                                : const Color(0xFFFEE2E2),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        statusLabel,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: isPending
+                                              ? const Color(0xFF92400E)
+                                              : kycStatus == 'verified'
+                                                  ? const Color(0xFF065F46)
+                                                  : const Color(0xFF991B1B),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF6FAF7),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.badge_outlined, size: 16, color: AppColors.primary),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          a['idDocumentType'] ?? a['id_document_type'] ?? 'KYC Document',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (isPending) ...[
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          onPressed: () => _updateKycStatus(a, 'rejected'),
+                                          child: const Text('Reject'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () => _updateKycStatus(a, 'verified'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.primary,
+                                          ),
+                                          child: const Text(
+                                            'Approve KYC',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: isPending ? const Color(0xFFFEF3C7) : const Color(0xFFD1FAE5),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        a['status'] as String,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: isPending ? const Color(0xFF92400E) : const Color(0xFF065F46),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF6FAF7),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.badge_outlined, size: 16, color: AppColors.primary),
-                      const SizedBox(width: 8),
-                      Text('${a['docType']}: ${a['docNum']}', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
-                if (isPending) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            setState(() => a['status'] = 'Rejected (Resubmit)');
-                          },
-                          child: const Text('Reject'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            setState(() => a['status'] = 'Verified');
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('${a['name']} KYC Approved!')),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                          child: const Text('Approve KYC', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          );
-        },
-      ),
     );
   }
 }

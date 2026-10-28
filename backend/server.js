@@ -16,6 +16,7 @@ const disputeRoutes = require('./routes/disputes');
 const notificationRoutes = require('./routes/notifications');
 const chatRoutes = require('./routes/chat');
 const uploadRoutes = require('./routes/upload');
+const appUpdateRoutes = require('./routes/app_update');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -71,6 +72,7 @@ app.use('/api/disputes', disputeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/app', appUpdateRoutes);
 
 // Route fallback for Admin Web Portal
 app.get('/admin', (req, res) => {

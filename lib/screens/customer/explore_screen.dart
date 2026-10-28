@@ -26,8 +26,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
   late String _selectedCategory;
   final _searchController = TextEditingController();
   String _sortBy = 'Recommended'; // Recommended, Price: Low to High, Top Rated, Nearest
-  double _maxPrice = 2000.0;
   final bool _verifiedOnly = false;
+  double _maxPrice = 5000.0;
 
   final List<String> _categories = [
     'All',
@@ -46,6 +46,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
     if (widget.initialQuery != null) {
       _searchController.text = widget.initialQuery!;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppStore.instance.syncWithBackend();
+    });
   }
 
   @override
@@ -74,12 +77,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
               !l.location.toLowerCase().contains(q)) {
             return false;
           }
-          // Price filter
-          if (l.pricePerDay > _maxPrice) {
-            return false;
-          }
           // Verified owner filter
           if (_verifiedOnly && !l.isOwnerVerified) {
+            return false;
+          }
+          // Max price filter
+          if (l.pricePerDay > _maxPrice) {
             return false;
           }
           return true;
@@ -103,16 +106,28 @@ class _ExploreScreenState extends State<ExploreScreen> {
               _buildCategoryChips(),
               _buildFilterSortBar(context, filtered.length),
               Expanded(
-                child: filtered.isEmpty
-                    ? _buildEmptyState()
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          return _buildListingCard(context, filtered[index]);
-                        },
-                      ),
+                child: RefreshIndicator(
+                  color: AppColors.primary,
+                  onRefresh: () => AppStore.instance.syncWithBackend(),
+                  child: filtered.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            SizedBox(
+                              height: MediaQuery.of(context).size.height * 0.5,
+                              child: _buildEmptyState(),
+                            ),
+                          ],
+                        )
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            return _buildListingCard(context, filtered[index]);
+                          },
+                        ),
+                ),
               ),
             ],
           ),

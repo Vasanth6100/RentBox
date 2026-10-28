@@ -92,16 +92,23 @@ const runTests = async () => {
     const publicListings = await request('GET', '/listings');
     assert(publicListings.status === 200 && publicListings.body.every(l => l.status === 'active'), '7. Public Listings API ONLY returns approved active items');
 
-    const adminQueue = await request('GET', '/admin/listings/queue?status=pendingApproval', null, adminToken);
-    assert(adminQueue.status === 200 && adminQueue.body.length > 0, '8. Admin Approvals Queue returns pending equipment submissions');
+    // 5. Listings API - Immediate Activation & Multi-User Visibility
+    const createRes = await request('POST', '/listings', {
+      id: 'ITEM-DIRECT-ACTIVE',
+      title: 'Sony Alpha Direct Test',
+      category: 'Cameras',
+      pricePerDay: 750,
+      securityDeposit: 3000,
+      ownerId: 'OWNER-1',
+      ownerName: 'Vikram Shah',
+      location: 'Mumbai'
+    });
+    assert(createRes.status === 201 && createRes.body.status === 'active', '8. Owner upload creates active listing immediately without admin approval');
 
-    // 6. Listing Approval Workflow
-    const testItemId = adminQueue.body[0].id;
-    const approveRes = await request('POST', `/listings/${testItemId}/approve`, {
-      adminId: 'USER-ADMIN',
-      adminName: 'RentBox Master Admin'
-    }, adminToken);
-    assert(approveRes.status === 200 && approveRes.body.success === true, '9. Admin Approve Listing succeeds & persists to MySQL');
+    // Verify it is immediately visible in public explore feed to other users
+    const publicExplore = await request('GET', '/listings');
+    const foundDirectItem = publicExplore.body.some(l => l.id === 'ITEM-DIRECT-ACTIVE');
+    assert(publicExplore.status === 200 && foundDirectItem, '9. Listing is immediately visible to all users on Explore feed');
 
     // 7. Booking Creation & Availability Overlap Prevention
     const bookingRes = await request('POST', '/bookings', {
